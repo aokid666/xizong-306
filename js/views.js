@@ -447,16 +447,23 @@
     function render() {
       const box = document.getElementById('list-body');
       const rows = [];
+      const all = [];
       Bank.subjectNames().forEach(function (n) {
-        (Bank.loaded[n] || []).forEach(function (q) {
-          if (tab === 'fav' && !Store.isFav(q.id)) return;
-          if (tab === 'wrong') { const p = Store.prog(q.id); if (!p || p.ok) return; }
-          if (tab === 'flag' && !Store.flag(q.id)) return;
-          if (tab === 'note') { const nt = Store.note(q.id); if (!nt) return; }
-          rows.push(q);
-        });
+        (Bank.loaded[n] || []).forEach(function (q) { all.push(q); });
       });
-      rows.sort(function (a, b) { return (b.y - a.y) || (a.n - b.n); });
+      (Bank.mock ? Bank.mock.list : []).forEach(function (q) { all.push(q); });
+      all.forEach(function (q) {
+        if (tab === 'fav' && !Store.isFav(q.id)) return;
+        if (tab === 'wrong') { const p = Store.prog(q.id); if (!p || p.ok) return; }
+        if (tab === 'flag' && !Store.flag(q.id)) return;
+        if (tab === 'note') { const nt = Store.note(q.id); if (!nt) return; }
+        rows.push(q);
+      });
+      rows.sort(function (a, b) {
+        const am = a.mock ? 1 : 0, bm = b.mock ? 1 : 0;
+        if (am !== bm) return am - bm;
+        return (b.y - a.y) || (a.n - b.n);
+      });
       items = Bank.itemsOf(rows);
       if (!items.length) {
         box.innerHTML = '<div class="empty">这里还是空的。' + (tab === 'fav' ? '做题时点 ☆ 收藏。' : tab === 'wrong' ? '做错的题会自动出现在这里。' : tab === 'flag' ? '点 ⚑ 给题目打标记。' : '') + '</div>';
@@ -464,12 +471,12 @@
       }
       box.innerHTML = '<div class="list result-list">' + items.map(function (it, i) {
         const q = it.qs[0];
-        const chap = Bank.chapterMeta(q.subj, q.ci);
+        const chap = q.mock ? null : Bank.chapterMeta(q.subj, q.ci);
         const fl = Store.flag(q.id);
         const p = Store.prog(q.id);
         return '<div class="row" data-i="' + i + '">' +
           '<div class="grow"><div class="t">' + esc(q.stem.slice(0, 56)) + (q.stem.length > 56 ? '…' : '') + '</div>' +
-          '<div class="d">' + esc(q.label) + ' · ' + esc(q.subj) + (chap ? ' · ' + esc(chap.t) : '') +
+          '<div class="d">' + (q.mock ? ('模拟 · ' + esc(q.set) + ' 第' + q.n + '题') : esc(q.label)) + ' · ' + esc(q.subj) + (chap ? ' · ' + esc(chap.t) : '') +
           (it.qs.length > 1 ? ' · 病例题 ' + it.qs.length + ' 小问' : '') +
           (fl ? ' · <span style="color:#bf2b2b">' + esc(Card.FLAGS[fl.t] || fl.t) + '</span>' : '') +
           (p ? ' · 上次' + (p.ok ? '正确' : '错误') : '') + '</div></div>' +
@@ -482,7 +489,7 @@
       if (seg) {
         tab = seg.dataset.v;
         U.$$('.seg[data-seg="tab"] button', app()).forEach(function (b) { b.classList.toggle('on', b === seg); });
-        loadThen(Bank.subjectNames(), render);
+        loadAllThen(render);
         return;
       }
       if (e.target.closest('[data-act="play"]')) {
@@ -497,10 +504,18 @@
       }
     });
 
+    function loadAllThen(fn) {
+      U.toast('正在载入题库…', 6000);
+      Bank.ensure(Bank.subjectNames())
+        .then(function () { return Bank.ensureMock(); })
+        .then(function () { const t = document.getElementById('toast'); if (t) t.hidden = true; fn(); })
+        .catch(function () { fn(); });
+    }
+
     // 默认标签
     const first = app().querySelector('.seg[data-seg="tab"] button');
     if (first) first.classList.add('on');
-    loadThen(Bank.subjectNames(), render);
+    loadAllThen(render);
   };
 
   /* ================= 模拟题 ================= */
@@ -607,7 +622,8 @@
 
   /* ================= 统计 ================= */
   Views.stats = function () {
-    Bank.ensure(Bank.subjectNames()).then(function () { renderStats(); });
+    Bank.ensure(Bank.subjectNames()).then(function () { return Bank.ensureMock(); })
+      .then(function () { renderStats(); }).catch(function () { renderStats(); });
     shell('<div class="empty">正在统计…</div>');
   };
 
@@ -637,6 +653,15 @@
         '<td class="n">' + (done ? U.pct(right, done) + '%' : '—') + '</td>' +
         '<td><div class="mini-bar"><i style="width:' + U.pct(done, s.n) + '%"></i></div></td></tr>';
     });
+    if (Bank.mock) {
+      let md = 0, mr = 0;
+      Bank.mock.list.forEach(function (q) {
+        const p = Store.prog(q.id); if (p) { md++; if (p.ok) mr++; }
+      });
+      html += '<tr><td>模拟题（天天师兄）</td><td class="n">' + Bank.mock.list.length + '</td><td class="n">' + md + '</td>' +
+        '<td class="n">' + (md ? U.pct(mr, md) + '%' : '—') + '</td>' +
+        '<td><div class="mini-bar"><i style="width:' + U.pct(md, Bank.mock.list.length) + '%"></i></div></td></tr>';
+    }
     html += '</tbody></table>';
 
     html += '<h3 style="margin:34px 0 10px;font-family:var(--serif)">标记分布</h3><table class="tb"><thead><tr><th>类型</th><th>数量</th></tr></thead><tbody>';
@@ -861,29 +886,152 @@
   /* ================= 搜索 ================= */
   Views.search = function (term) {
     let html = crumb([{ t: '首页', href: '#/home' }, { t: '搜索：' + term }]);
-    html += '<div class="page-hd"><h1>搜索 “' + esc(term) + '”</h1><div class="sub" data-count>正在载入题库…</div></div>';
-    html += '<div id="search-body"><div class="empty">首次搜索需要下载全部题库（约 7MB），稍等一下就好；之后会走浏览器缓存。</div></div>';
+    html += '<div class="page-hd"><h1>搜索 “' + esc(term) + '”</h1>' +
+      '<div class="sub" data-count>正在载入题库…</div></div>';
+
+    const st = {
+      scope: 'all', fields: ['stem', 'opts'], subjects: [], yFrom: 0, yTo: 9999
+    };
+
+    html += '<div class="sf">' +
+      '<div class="sf-row"><span class="sf-k">范围</span><div class="seg" data-fs="scope">' +
+      '<button data-v="all" class="on">全部</button><button data-v="real">真题</button><button data-v="mock">模拟题</button></div>' +
+      '<span class="hint" data-scope-hint></span></div>' +
+      '<div class="sf-row"><span class="sf-k">搜在哪</span>' +
+      '<label class="chk"><input type="checkbox" data-ff="stem" checked> 题干</label>' +
+      '<label class="chk"><input type="checkbox" data-ff="opts" checked> 选项</label>' +
+      '<label class="chk"><input type="checkbox" data-ff="exp"> 解析</label>' +
+      '<label class="chk"><input type="checkbox" data-ff="meta"> 章节 / 题号 / 知识点</label></div>' +
+      '<div class="sf-row"><span class="sf-k">科目</span><span data-subj-box></span></div>' +
+      '<div class="sf-row" data-year-row><span class="sf-k">年份</span>' +
+      '<input class="input" type="number" min="1988" max="2026" placeholder="起" data-yfrom style="width:84px">' +
+      '<span class="hint">—</span>' +
+      '<input class="input" type="number" min="1988" max="2026" placeholder="止" data-yto style="width:84px">' +
+      '<span class="hint">留空＝不限</span></div>' +
+      '</div>';
+
+    html += '<div id="search-body"><div class="empty">正在载入题库…（首次搜索要下载全部题库，约 7MB）</div></div>';
     shell(html);
-    U.toast('正在载入题库，搜索马上出结果…', 4000);
-    loadThen(Bank.subjectNames(), function () {
-      const rows = Bank.search(term, 120);
-      const box = document.getElementById('search-body');
-      const cnt = app().querySelector('[data-count]');
-      if (!rows.length) { cnt.textContent = '没有找到'; box.innerHTML = '<div class="empty">换个关键词试试，或直接用年份代号（如 2019N52）。</div>'; return; }
-      cnt.textContent = '共 ' + rows.length + ' 条' + (rows.length >= 120 ? '（仅显示前 120 条）' : '');
-      const items = Bank.itemsOf(rows);
-      box.innerHTML = '<div class="list result-list">' + items.map(function (it, i) {
-        const q = it.qs[0];
-        return '<div class="row" data-i="' + i + '"><div class="grow">' +
-          '<div class="t">' + esc(q.stem.slice(0, 70)) + (q.stem.length > 70 ? '…' : '') + '</div>' +
-          '<div class="d">' + esc(q.label) + ' · ' + esc(q.subj) + '</div></div>' +
-          '<span class="num">' + esc(q.label) + '</span><span class="go">→</span></div>';
-      }).join('') + '</div>';
-      box.addEventListener('click', function (e) {
-        const row = e.target.closest('.row[data-i]');
-        if (row) startItems([items[+row.dataset.i]], '搜索回顾', term);
-      });
+
+    const body = function () { return document.getElementById('search-body'); };
+    const cntEl = function () { return app().querySelector('[data-count]'); };
+
+    // 科目 chips
+    const subjBox = app().querySelector('[data-subj-box]');
+    Bank.subjectNames().forEach(function (n) {
+      const b = U.el('button', { class: 'sf-chip', 'data-subj': n }, esc(n));
+      subjBox.appendChild(b);
     });
+
+    let timer = null;
+    function schedule() { clearTimeout(timer); timer = setTimeout(run, 160); }
+
+    function run() {
+      const opt = {
+        scope: st.scope, fields: st.fields,
+        subjects: st.subjects, yearFrom: st.yFrom, yearTo: st.yTo, limit: 300
+      };
+      const rows = Bank.search(term, opt);
+      const items = Bank.itemsOf(rows);
+      const seen = {};
+      const uniq = [];
+      items.forEach(function (it) {
+        if (seen[it.key]) return;
+        seen[it.key] = 1;
+        uniq.push(it);
+      });
+      const c = cntEl();
+      if (c) {
+        const realN = rows.filter(function (q) { return !q.mock; }).length;
+        const mockN = rows.filter(function (q) { return q.mock; }).length;
+        c.textContent = '命中 ' + rows.length + ' 题（真题 ' + realN + ' · 模拟题 ' + mockN + '）' +
+          (rows.length >= 300 ? '，仅显示前 300 条' : '');
+      }
+      const box = body();
+      if (!rows.length) {
+        box.innerHTML = '<div class="empty">没有找到。换个词试试，或放宽搜索范围（范围/科目/年份/字段）。</div>';
+        return;
+      }
+      const t = term.toLowerCase();
+      const mark = function (txt) {
+        const i = txt.toLowerCase().indexOf(t);
+        if (i < 0) return esc(txt);
+        return esc(txt.slice(0, i)) + '<mark class="hl">' + esc(txt.slice(i, i + term.length)) + '</mark>' +
+          esc(txt.slice(i + term.length));
+      };
+      box.innerHTML = '<div class="list result-list">' + uniq.map(function (it, i) {
+        const q = it.qs[0];
+        const where = q.mock
+          ? ('模拟 · ' + esc(q.set || '') + ' 第' + q.n + '题 · ' + esc(q.subj))
+          : (esc(q.label) + ' · ' + esc(q.subj) + (q.kp ? ' · ' + esc(q.kp) : ''));
+        return '<div class="row" data-i="' + i + '"><div class="grow">' +
+          '<div class="t">' + mark(q.stem.slice(0, 90)) + (q.stem.length > 90 ? '…' : '') + '</div>' +
+          '<div class="d">' + where + (it.qs.length > 1 ? ' · 共 ' + it.qs.length + ' 小问' : '') + '</div></div>' +
+          '<span class="num">' + (q.mock ? '模拟' : esc(q.label)) + '</span><span class="go">→</span></div>';
+      }).join('') + '</div>';
+      box._items = uniq;
+    }
+
+    function loadAll() {
+      U.toast('正在载入题库，搜索马上出结果…', 4000);
+      return Bank.ensure(Bank.subjectNames())
+        .then(function () { return Bank.ensureMock(); })
+        .then(function () {
+          const yf = app().querySelector('[data-yfrom]');
+          const yt = app().querySelector('[data-yto]');
+          if (yf) yf.value = '';
+          if (yt) yt.value = '';
+          run();
+        })
+        .catch(function (e) {
+          body().innerHTML = '<div class="empty">题库载入失败：' + esc(e.message) + '</div>';
+        });
+    }
+
+    app().addEventListener('click', function (e) {
+      const sc = e.target.closest('.seg[data-fs="scope"] button');
+      if (sc) {
+        st.scope = sc.dataset.v;
+        U.$$('.seg[data-fs="scope"] button', app()).forEach(function (b) { b.classList.toggle('on', b === sc); });
+        const yr = app().querySelector('[data-year-row]');
+        if (yr) yr.style.opacity = st.scope === 'mock' ? '.45' : '1';
+        schedule();
+        return;
+      }
+      const chip = e.target.closest('[data-subj]');
+      if (chip) {
+        const n = chip.dataset.subj;
+        const i = st.subjects.indexOf(n);
+        if (i >= 0) st.subjects.splice(i, 1); else st.subjects.push(n);
+        chip.classList.toggle('on', i < 0);
+        schedule();
+        return;
+      }
+      const row = e.target.closest('.row[data-i]');
+      if (row && body()._items) {
+        const it = body()._items[+row.dataset.i];
+        if (it) startItems([it], '搜索回顾', term);
+      }
+    });
+
+    app().addEventListener('change', function (e) {
+      if (e.target.matches('[data-ff]')) {
+        st.fields = U.$$('[data-ff]', app()).filter(function (x) { return x.checked; }).map(function (x) { return x.dataset.ff; });
+        if (!st.fields.length) { st.fields = ['stem']; U.$('[data-ff="stem"]', app()).checked = true; }
+        schedule();
+      }
+      if (e.target.matches('[data-yfrom]') || e.target.matches('[data-yto]')) {
+        const a = parseInt(app().querySelector('[data-yfrom]').value, 10);
+        const b = parseInt(app().querySelector('[data-yto]').value, 10);
+        st.yFrom = isNaN(a) ? 0 : a;
+        st.yTo = isNaN(b) ? 9999 : b;
+        if (st.yFrom && st.yTo && st.yFrom > st.yTo) { const t2 = st.yFrom; st.yFrom = st.yTo; st.yTo = t2; }
+        schedule();
+      }
+    });
+
+    loadAll();
   };
+
 })();
 
