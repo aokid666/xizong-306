@@ -398,6 +398,28 @@ table.tb td.n{font-family:var(--mono);text-align:right}
   .opts{gap:6px}
   .pager .in{padding:9px 14px}
 }
+.sheet-hd{margin:16px 0 8px;font-size:13px;font-weight:600;color:var(--ink-2)}
+.sheet-hd:first-of-type{margin-top:6px}
+
+/* ---------- 多选 / B 型题 / 共用备选 ---------- */
+.tag.multi{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:700;letter-spacing:1px}
+.shared-opts{border:1px solid var(--line);background:var(--paper-2);border-radius:8px;padding:12px 14px;margin-bottom:16px}
+.shared-hd{font-size:12px;color:var(--muted);margin-bottom:8px}
+.opts.plain .opt.static{cursor:text;background:none;border-color:transparent;padding:5px 8px}
+.opts.plain .opt.static:hover{background:none}
+.picks{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.pick{
+  width:44px;height:38px;border:1px solid var(--line);border-radius:7px;background:#fff;
+  font-family:var(--mono);font-size:15px;color:var(--ink-2);display:inline-flex;align-items:center;justify-content:center;
+}
+.pick:hover{border-color:#c1bbb3;background:var(--paper-2)}
+.pick.sel{background:var(--sel);border-color:#d9d4cd;color:var(--ink);font-weight:700}
+.pick.correct{background:var(--green-bg);border-color:#c3ddc9;color:var(--green)}
+.pick.wrong{background:var(--red-bg);border-color:#e4c4c4;color:var(--red)}
+.pick.dim{opacity:.5}
+.card.hide-meta .metatag{display:none}
+[hidden]{display:none!important}
+
 @media (max-width:640px){
   #q-search{display:none}
   .session-tools{gap:4px}
