@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>synctest</title>
+<style>pre{font:12px/1.5 monospace;white-space:pre-wrap;padding:10px}</style>
+</head>
+<body>
+<pre id="log">running…</pre>
+<script>window.__errors=[];window.onerror=function(m,s,l){window.__errors.push(m+' @'+l);};</script>
+<script src="../data/meta.js"></script>
+<script src="../js/store.js"></script>
+<script>
+(function () {
+  const lines = []; let fail = 0;
+  const log = function () { document.getElementById('log').textContent = lines.join('\n'); };
+  function ok(n, c, e) { lines.push((c ? '[PASS] ' : '[FAIL] ') + n + (e != null ? '  — ' + e : '')); if (!c) fail++; log(); }
+  function done() { lines.push(''); lines.push('errors: ' + (window.__errors.join(' | ') || 'none')); lines.push(fail ? 'FAILED ' + fail : 'ALL PASS'); log(); document.title = fail ? 'FAIL' : 'OK'; }
+  const q = new URLSearchParams(location.search);
+
+  (async function () {
+    await Store.init();
+    const token = q.get('t') || '';
+    if (!token) { lines.push('no token'); done(); return; }
+    const cfg = { repo: 'aokid666/xizong-306-data', path: 'test-sync.json', branch: 'main', token: token };
+    Store.cloud.setCfg(cfg);
+    ok('configured', Store.cloud.configured());
+
+    // 本地造点数据
+    Store.doc.progress['TESTQ'] = { a: 'A', ok: 1, t: Date.now(), n: 1 };
+    Store.doc.fav['TESTQ'] = Date.now();
+    Store.doc.notes['TESTQ'] = { t: 'hello sync', imgs: [], ts: Date.now() };
+    Store.doc.keys['MTEST'] = { v: 'BD', t: Date.now() };
+
+    const okPush = await Store.cloud.syncNow();
+    ok('sync #1', okPush, Store.cloud.state + ' ' + (Store.cloud.error || ''));
+
+    // 模拟另一台设备：清空本地再拉取
+    Store.doc.progress = {}; Store.doc.fav = {}; Store.doc.notes = {}; Store.doc.keys = {};
+    const okPull = await Store.cloud.syncNow();
+    ok('sync #2', okPull, Store.cloud.state + ' ' + (Store.cloud.error || ''));
+    ok('progress restored', !!Store.doc.progress['TESTQ'], JSON.stringify(Store.doc.progress['TESTQ'] || null));
+    ok('fav restored', !!Store.doc.fav['TESTQ']);
+    ok('note restored', (Store.doc.notes['TESTQ'] || {}).t === 'hello sync');
+    ok('key restored', (Store.doc.keys['MTEST'] || {}).v === 'BD');
+
+    // 冲突测试：本地更新的时间戳应胜出
+    const old = Date.now() - 100000;
+    Store.doc.progress['TESTQ'] = { a: 'B', ok: 0, t: old, n: 1 };
+    Store.doc.progress['NEWQ'] = { a: 'C', ok: 1, t: Date.now(), n: 1 };
+    await Store.cloud.syncNow();
+    ok('local newer kept', Store.doc.progress['TESTQ'].a === 'A', Store.doc.progress['TESTQ'].a);
+    ok('new key merged', !!Store.doc.progress['NEWQ']);
+
+    ok('status label', /已同步/.test(Store.cloud.label()), Store.cloud.label());
+    done();
+  })().catch(function (e) { lines.push('[FATAL] ' + (e && e.stack || e)); done(); });
+})();
+</script>
+</body>
+</html>
