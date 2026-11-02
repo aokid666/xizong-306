@@ -414,22 +414,30 @@
 
   function mapDialog(item) {
     const q = item.qs[0];
-    const pages = Bank.mapPagesForQuestion(q);
     const body = U.el('div');
-    body.innerHTML = '<p class="hint" style="margin-bottom:12px">' +
-      (pages.length
-        ? ('找到这一章对应的导图 <b>' + pages.length + '</b> 页（' + esc(pages[0].c || pages[0].s || '') + '）')
-        : (Bank.mapSubjectKey(q.subj) ? '这一章暂时没有对应导图' : '人文精神没有配套的思维导图')) + '</p>';
+    body.innerHTML = '<p class="hint" data-mp-hint>正在载入导图…</p>';
     const row = U.el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' });
     const b1 = U.el('button', { class: 'btn' }, '侧边分屏（左题右图）');
     const b2 = U.el('button', { class: 'btn' }, '显示在题目下方');
-    b1.disabled = !pages.length;
-    b2.disabled = !pages.length;
+    b1.disabled = true; b2.disabled = true;
     b1.addEventListener('click', function () { U.closeModal(); MapUI.openForQuestion(item, 'side'); });
     b2.addEventListener('click', function () { U.closeModal(); MapUI.openForQuestion(item, 'inline'); });
     row.appendChild(b1); row.appendChild(b2);
     body.appendChild(row);
     U.modal({ title: '思维导图', body: body, buttons: [{ label: '关闭' }] });
+
+    const hint = body.querySelector('[data-mp-hint]');
+    Bank.ensureMaps().then(function () {
+      const pages = Bank.mapPagesForQuestion(q);
+      if (pages.length) {
+        hint.innerHTML = '找到这一章对应的导图 <b>' + pages.length + '</b> 页（' + esc(pages[0].c || pages[0].s || '') + '）';
+        b1.disabled = false; b2.disabled = false;
+      } else {
+        hint.textContent = Bank.mapSubjectKey(q.subj) ? '这一章暂时没有对应导图' : '人文精神没有配套的思维导图';
+      }
+    }).catch(function () {
+      hint.textContent = '导图载入失败';
+    });
   }
 
   function linkDialog(item) {
