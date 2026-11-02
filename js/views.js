@@ -69,6 +69,7 @@
       entry('收藏 / 错题 / 标记', '回顾收藏、做错的题，以及标记为过时、争议的题', '#/lists') +
       entry('学习统计', '各科目进度与正确率', '#/stats') +
       entry('设置与备份', '解析显示方式、提交方式、数据导出导入', '#/settings') +
+      entry('使用说明', '题库来源、合并规则与数据格式（GitHub README）', 'https://github.com/aokid666/xizong-306#readme', true) +
       '</div>';
 
     html += '<div style="margin-top:40px" class="hint">提示：病例题（共用题干的多小问）在组题与随机时始终作为一个整体，不会被拆开；提交时也只给一个提交按钮。</div>';
@@ -90,8 +91,9 @@
     });
   };
 
-  function entry(t, d, href) {
-    return '<a class="entry" href="' + href + '"><h3>' + esc(t) + '</h3><p>' + esc(d) + '</p></a>';
+  function entry(t, d, href, blank) {
+    return '<a class="entry" href="' + href + '"' + (blank ? ' target="_blank" rel="noopener"' : '') + '>' +
+      '<h3>' + esc(t) + '</h3><p>' + esc(d) + '</p></a>';
   }
 
   /* ================= 按年份 ================= */
