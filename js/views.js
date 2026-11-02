@@ -210,71 +210,156 @@
     });
   };
 
-  Views.subject = function (name) {
-    const s = Bank.subjectMeta(name);
-    if (!s) { location.hash = '#/subjects'; return; }
-    let html = crumb([{ t: '首页', href: '#/home' }, { t: '按科目', href: '#/subjects' }, { t: name }]);
-    html += '<div class="page-hd"><h1>' + esc(name) + '</h1><div class="sub">' + s.chapters.length + ' 章 · ' + s.n + ' 题　（点击章标题展开）</div></div>';
-    html += '<div class="tree-tools">' +
-      '<button class="btn sm" data-all="seq">整科顺序刷</button>' +
-      '<button class="btn sm" data-all="rand">整科随机刷</button>' +
-      '<span class="hint">章节内可按年份顺序，也可随机</span></div>';
-    html += '<div class="tree">';
-    s.chapters.forEach(function (ch, ci) {
-      html += '<details class="tree-ch"><summary>' +
-        '<span class="caret">▶</span>' +
-        '<span class="name">' + (ch.p ? '第' + ch.p + '篇 ' : '') + '第' + ch.z + '章 ' + esc(ch.t) + '</span>' +
-        '<span class="meta">' + ch.n + ' 题</span></summary>';
-      html += '<div class="ch-actions">' +
-        '<button class="btn sm" data-ch="' + ci + '" data-order="seq">刷本章</button>' +
-        '<button class="btn sm" data-ch="' + ci + '" data-order="rand">随机本章</button></div>';
-      ch.sec.forEach(function (sec, si) {
-        html += '<div class="tree-sec">' +
-          '<div class="st"><span>' + esc(sec.t) + '</span><span class="n">' + sec.n + '</span>' +
-          '<span style="flex:1"></span>' +
-          '<button class="btn ghost sm" data-sec="' + si + '" data-ch="' + ci + '">刷本节</button></div>';
-        if (sec.kp && sec.kp.length) {
-          html += '<div class="kps">' + sec.kp.slice(0, 14).map(function (k) {
-            return '<span class="kp" data-ch="' + ci + '" data-sec="' + si + '" data-kp="' + esc(k.t) + '">' +
-              esc(k.t) + '<span class="c">' + k.n + '</span></span>';
-          }).join('') + '</div>';
-        }
-        html += '</div>';
-      });
-      html += '</details>';
+﻿  Views.subject = function (name) {
+    const s0 = Bank.subjectMeta(name);
+    if (!s0) { location.hash = '#/subjects'; return; }
+    shell('<div class="empty">正在载入 ' + esc(name) + ' …</div>');
+    Bank.ensure([name]).then(function () { renderTree(); }).catch(function (e) {
+      shell('<div class="empty">载入失败：' + esc(e.message) + '</div>');
     });
-    html += '</div>';
-    shell(html);
-    bindSubject(name);
+
+    const open = {};
+    function range() {
+      return { f: Store.get('subjFrom') || 0, t: Store.get('subjTo') || 9999 };
+    }
+    function inRange(q) { const r = range(); return q.y >= r.f && q.y <= r.t; }
+
+    function qsOf(ci, secTitle, kp) {
+      return (Bank.loaded[name] || []).filter(function (q) {
+        if (q.ci !== ci) return false;
+        if (!inRange(q)) return false;
+        if (secTitle) {
+          const t = q.sec.replace(/^第[一二三四五六七八九十百\d]+节\s*/, '');
+          if (q.sec !== secTitle && t !== secTitle) return false;
+        }
+        if (kp && q.kp !== kp) return false;
+        return true;
+      });
+    }
+
+    function renderTree() {
+      const years = Bank.meta.years;
+      const y0 = years[0].y, y1 = years[years.length - 1].y;
+      const r = range();
+      let html = crumb([{ t: '首页', href: '#/home' }, { t: '按科目', href: '#/subjects' }, { t: name }]);
+      html += '<div class="page-hd"><h1>' + esc(name) + '</h1><div class="sub">' +
+        s0.chapters.length + ' 章 · ' + s0.n + ' 题　（点击章标题展开）</div></div>';
+
+      html += '<div class="tree-tools" style="gap:8px">' +
+        '<span class="hint">年份</span>' +
+        '<select class="select" data-yr="from"></select><span class="hint">—</span>' +
+        '<select class="select" data-yr="to"></select>' +
+        '<button class="btn sm" data-quick="all">全部</button>' +
+        '<button class="btn sm" data-quick="10">近 10 年</button>' +
+        '<button class="btn sm" data-quick="5">近 5 年</button>' +
+        '<span class="hint" data-range-hint></span></div>';
+
+      html += '<div class="tree-tools">' +
+        '<button class="btn sm" data-all="seq">整科顺序刷</button>' +
+        '<button class="btn sm" data-all="rand">整科随机刷</button>' +
+        '<span class="hint">数字＝所选年份范围内的题量；该范围内没题的章/节/知识点会变灰</span></div>';
+
+      html += '<div class="tree">';
+      s0.chapters.forEach(function (ch, ci) {
+        const chQs = qsOf(ci);
+        const empty = chQs.length === 0;
+        const isOpen = open[ci];
+        html += '<details class="tree-ch' + (empty ? ' dim' : '') + '" data-ci="' + ci + '"' + (isOpen ? ' open' : '') + '>' +
+          '<summary><span class="caret">▶</span>' +
+          '<span class="name">' + (ch.p ? '第' + ch.p + '篇 ' : '') + '第' + ch.z + '章 ' + esc(ch.t) + '</span>' +
+          '<span class="meta">' + chQs.length + ' 题</span></summary>';
+        html += '<div class="ch-actions">' +
+          '<button class="btn sm" data-ch="' + ci + '" data-order="seq"' + (empty ? ' disabled' : '') + '>刷本章</button>' +
+          '<button class="btn sm" data-ch="' + ci + '" data-order="rand"' + (empty ? ' disabled' : '') + '>随机本章</button></div>';
+        ch.sec.forEach(function (sec, si) {
+          const secQs = qsOf(ci, sec.t);
+          const secEmpty = secQs.length === 0;
+          html += '<div class="tree-sec' + (secEmpty ? ' dim' : '') + '">' +
+            '<div class="st"><span>' + esc(sec.t) + '</span><span class="n">' + secQs.length + '</span>' +
+            '<span style="flex:1"></span>' +
+            '<button class="btn ghost sm" data-sec="' + si + '" data-ch="' + ci + '"' + (secEmpty ? ' disabled' : '') + '>刷本节</button></div>';
+          if (sec.kp && sec.kp.length) {
+            html += '<div class="kps">' + sec.kp.map(function (k) {
+              const n = qsOf(ci, sec.t, k.t).length;
+              return '<span class="kp' + (n ? '' : ' dim') + '" data-ch="' + ci + '" data-sec="' + si + '" data-kp="' + esc(k.t) + '">' +
+                esc(k.t) + '<span class="c">' + n + '</span></span>';
+            }).join('') + '</div>';
+          }
+          html += '</div>';
+        });
+        html += '</details>';
+      });
+      html += '</div>';
+      shell(html);
+
+      const fSel = app().querySelector('[data-yr="from"]');
+      const tSel = app().querySelector('[data-yr="to"]');
+      years.forEach(function (y) {
+        fSel.appendChild(U.el('option', { value: y.y }, String(y.y)));
+        tSel.appendChild(U.el('option', { value: y.y }, String(y.y)));
+      });
+      fSel.value = String(r.f || y0);
+      tSel.value = String(r.t === 9999 ? y1 : r.t);
+      const hint = app().querySelector('[data-range-hint]');
+      if (hint) hint.textContent = '当前 ' + (r.f || y0) + '–' + (r.t === 9999 ? y1 : r.t);
+
+      // 记录展开状态
+      app().querySelectorAll('details.tree-ch').forEach(function (d) {
+        d.addEventListener('toggle', function () { open[+d.dataset.ci] = d.open; });
+      });
+
+      app().addEventListener('change', function (e) {
+        if (!e.target.matches('[data-yr]')) return;
+        let f = parseInt(app().querySelector('[data-yr="from"]').value, 10) || y0;
+        let t = parseInt(app().querySelector('[data-yr="to"]').value, 10) || y1;
+        if (f > t) { const tmp = f; f = t; t = tmp; }
+        Store.set('subjFrom', f === y0 ? 0 : f);
+        Store.set('subjTo', t === y1 ? 9999 : t);
+        renderTree();
+      });
+
+      bindSubject(name, qsOf);
+    }
   };
 
-  function bindSubject(name) {
-    const s = Bank.subjectMeta(name);
+  function bindSubject(name, qsOf) {
+    const s0 = Bank.subjectMeta(name);
     app().addEventListener('click', function (e) {
-      const chBtn = e.target.closest('[data-ch]');
-      const allBtn = e.target.closest('[data-all]');
-      if (allBtn) {
-        loadThen([name], function () {
-          const items = Bank.itemsBySubject(name);
-          if (allBtn.dataset.all === 'rand') Bank.shuffle(items);
-          startItems(items, name + (allBtn.dataset.all === 'rand' ? '（随机）' : '（顺序）'), name + ' · ' + items.length + ' 题');
-        });
+      const qb = e.target.closest('[data-quick]');
+      if (qb) {
+        const years = Bank.meta.years;
+        const y1 = years[years.length - 1].y;
+        const n = qb.dataset.quick;
+        if (n === 'all') { Store.set('subjFrom', 0); Store.set('subjTo', 9999); }
+        else { Store.set('subjFrom', y1 - (parseInt(n, 10) - 1)); Store.set('subjTo', 9999); }
+        Views.subject(name);
         return;
       }
-      if (!chBtn) return;
+      const allBtn = e.target.closest('[data-all]');
+      if (allBtn) {
+        const qs = [];
+        (Bank.loaded[name] || []).forEach(function (q) {
+          if (qsOf && qsOf(q.ci).indexOf(q) < 0) return;
+          qs.push(q);
+        });
+        let items = Bank.itemsOf(qs);
+        if (allBtn.dataset.all === 'rand') Bank.shuffle(items);
+        startItems(items, name + (allBtn.dataset.all === 'rand' ? '（随机）' : '（顺序）'), name);
+        return;
+      }
+      const chBtn = e.target.closest('[data-ch]');
+      if (!chBtn || chBtn.disabled) return;
       const ci = +chBtn.dataset.ch;
       const secIdx = chBtn.dataset.sec != null ? +chBtn.dataset.sec : null;
       const kp = chBtn.dataset.kp || '';
-      if (e.target.classList.contains('kp') && !e.target.dataset.kp) return;
-      loadThen([name], function () {
-        const ch = s.chapters[ci];
-        const secTitle = secIdx != null && ch.sec[secIdx] ? ch.sec[secIdx].t : null;
-        let items = Bank.itemsByChapter(name, ci, secTitle, kp);
-        const order = chBtn.dataset.order || 'seq';
-        if (order === 'rand') Bank.shuffle(items);
-        const label = name + ' · 第' + ch.z + '章 ' + ch.t + (secTitle ? ' · ' + secTitle : '') + (kp ? ' · ' + kp : '');
-        startItems(items, label, label.replace(/ · /g, ' / '));
-      });
+      const ch = s0.chapters[ci];
+      const secTitle = secIdx != null && ch.sec[secIdx] ? ch.sec[secIdx].t : null;
+      const qs = qsOf ? qsOf(ci, secTitle, kp) : [];
+      let items = Bank.itemsOf(qs);
+      if (!items.length) { U.toast('这个范围内没有题目'); return; }
+      if ((chBtn.dataset.order || 'seq') === 'rand') Bank.shuffle(items);
+      const label = name + ' · 第' + ch.z + '章 ' + ch.t + (secTitle ? ' · ' + secTitle : '') + (kp ? ' · ' + kp : '');
+      startItems(items, label, label.replace(/ · /g, ' / '));
     });
   }
 
@@ -323,11 +408,19 @@
       '<div class="seg" data-seg="order"><button data-v="rand" class="on">随机打乱</button><button data-v="seq">按章节顺序</button></div>' +
       '</div></div>';
 
+    html += '<div class="field"><div class="k">名称</div><div class="v">' +
+      '<input class="input" data-paper-name placeholder="给这份题单起个名字（留空自动命名）" style="min-width:280px">' +
+      '<label class="chk"><input type="checkbox" data-save-paper checked> 存进「我的题单」</label>' +
+      '</div></div>';
+
     html += '<div style="display:flex;gap:12px;align-items:center;margin-top:22px;flex-wrap:wrap">' +
       '<button class="btn primary" data-act="go">生成并开始</button>' +
       '<span class="hint" data-preview>已选：全部</span></div>';
 
+    html += '<div style="margin-top:40px" id="paper-box"></div>';
+
     shell(html);
+    renderPapers();
 
     // 填充章节树
     const chapBox = app().querySelector('[data-chap-box]');
@@ -398,6 +491,41 @@
     }
 
     app().addEventListener('click', function (e) {
+      const pgo = e.target.closest('[data-pgo]');
+      if (pgo) { openPaper(pgo.dataset.pgo); return; }
+      const pnm = e.target.closest('[data-pname]');
+      if (pnm) {
+        const p = Store.papers().filter(function (x) { return x.id === pnm.dataset.pname; })[0];
+        if (!p) return;
+        const body = U.el('div');
+        const inp = U.el('input', { class: 'input', style: 'width:100%', value: p.name });
+        body.appendChild(inp);
+        U.modal({
+          title: '重命名题单', body: body, onOpen: function () { inp.focus(); inp.select(); },
+          buttons: [{ label: '取消' }, {
+            label: '保存', cls: 'primary', onClick: function () {
+              const v = inp.value.trim();
+              if (v) { Store.renamePaper(p.id, v); renderPapers(); U.toast('已重命名'); }
+            }
+          }]
+        });
+        return;
+      }
+      const pdl = e.target.closest('[data-pdel]');
+      if (pdl) {
+        const p = Store.papers().filter(function (x) { return x.id === pdl.dataset.pdel; })[0];
+        U.modal({
+          title: '删除题单？',
+          body: '<p>只删除这份题单记录，做题记录与错题本不受影响。</p>' +
+            (p ? '<p class="hint">' + esc(p.name) + '</p>' : ''),
+          buttons: [{ label: '取消' }, {
+            label: '删除', cls: 'primary', onClick: function () {
+              Store.removePaper(pdl.dataset.pdel); renderPapers(); U.toast('已删除');
+            }
+          }]
+        });
+        return;
+      }
       if (!e.target.closest('[data-act="go"]')) return;
       const subs = checkedSubjects();
       const chaps = U.$$('[data-chap]:checked', app()).map(function (x) { return x.value; });
@@ -421,11 +549,88 @@
         if (!items.length) { U.toast('没有符合条件的题目'); return; }
         if (order === 'rand') Bank.shuffle(items);
         if (count < items.length) items = items.slice(0, count);
-        const label = '随机组题 · ' + items.length + ' 组';
-        startItems(items, label, (subs.length ? subs.join('/') : '全科') + ' · ' + opt.yearFrom + '–' + opt.yearTo);
+        const nameInput = app().querySelector('[data-paper-name]');
+        const wantSave = app().querySelector('[data-save-paper]').checked;
+        const auto = (subs.length ? subs.join('/') : '全科') + ' · ' + items.length + ' 组 · ' +
+          new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const name = (nameInput && nameInput.value.trim()) || auto;
+        if (wantSave) {
+          Store.addPaper({
+            name: name, items: items.map(function (it) { return it.key; }),
+            filters: (subs.length ? subs.join('/') : '全科') + ' · ' + opt.yearFrom + '–' + opt.yearTo +
+              (chaps.length ? ' · 已选 ' + chaps.length + ' 章' : '') + ' · ' + count + ' 组'
+          });
+        }
+        startItems(items, name, (subs.length ? subs.join('/') : '全科') + ' · ' + opt.yearFrom + '–' + opt.yearTo);
       });
     });
   };
+
+  /* ================= 我的题单（组题历史） ================= */
+  function renderPapers() {
+    const box = document.getElementById('paper-box');
+    if (!box) return;
+    const list = Store.papers();
+    if (!list.length) {
+      box.innerHTML = '<h3 style="font-family:var(--serif);margin-bottom:10px">我的题单</h3>' +
+        '<div class="empty">还没有保存过题单。生成一次组题后会自动出现在这里。</div>';
+      return;
+    }
+    let html = '<h3 style="font-family:var(--serif);margin-bottom:10px">我的题单 <span class="hint">（' + list.length + '）</span></h3>';
+    html += '<div class="list">';
+    list.forEach(function (p, i) {
+      let done = 0, right = 0, total = 0;
+      (p.items || []).forEach(function (key) {
+        const it = paperItem(key);
+        if (!it) return;
+        total++;
+        const allDone = it.qs.every(function (q) { return Store.prog(q.id); });
+        if (allDone) {
+          done++;
+          if (it.qs.every(function (q) { return (Store.prog(q.id) || {}).ok; })) right++;
+        }
+      });
+      html += '<div class="row" data-paper="' + p.id + '">' +
+        '<div class="grow"><div class="t">' + esc(p.name) + '</div>' +
+        '<div class="d">' + U.fmtTime(p.ts) + ' · ' + total + ' 组 · 已做 ' + done +
+        (done ? ' · 正确率 ' + U.pct(right, done) + '%' : '') +
+        (p.filters ? ' · ' + esc(p.filters) : '') + '</div>' +
+        '<div class="bar" style="margin-top:6px"><i style="width:' + U.pct(done, total || 1) + '%"></i></div></div>' +
+        '<button class="btn sm" data-pgo="' + p.id + '">' + (done ? '继续' : '开始') + '</button>' +
+        '<button class="btn ghost sm" data-pname="' + p.id + '">重命名</button>' +
+        '<button class="btn ghost sm" data-pdel="' + p.id + '">删除</button></div>';
+    });
+    html += '</div>';
+    box.innerHTML = html;
+  }
+
+  function openPaper(id) {
+    const p = Store.papers().filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    U.toast('正在载入题单…', 6000);
+    Bank.ensureAll().then(function () { return Bank.ensureMock(); }).then(function () {
+      const items = (p.items || []).map(paperItem).filter(Boolean);
+      if (!items.length) { U.toast('这份题单里的题已经找不到了'); return; }
+      startItems(items, p.name, p.filters || '');
+    }).catch(function (e) { U.toast('载入失败：' + e.message); });
+  }
+
+  function paperItem(key) {
+    if (key.indexOf('c:') === 0) {
+      const qs = Bank.clusters[key.slice(2)];
+      return qs && qs.length ? Bank.itemOf(qs[0]) : null;
+    }
+    if (key.indexOf('b:') === 0) {
+      const q = Bank.q(key.slice(2));
+      return q ? Bank.itemsOf([q])[0] : null;
+    }
+    if (key.indexOf('mg:') === 0) {
+      const q = Bank.q(key.slice(3));
+      return q ? Bank.itemOf(q) : null;
+    }
+    const q = Bank.q(key.slice(2));
+    return q ? Bank.itemOf(q) : null;
+  }
 
   /* ================= 收藏 / 错题 / 标记 ================= */
   Views.lists = function () {
