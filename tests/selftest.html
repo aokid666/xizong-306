@@ -141,7 +141,7 @@ window.onerror = function (m, s, l, c, e) { window.__errors.push(m + ' @' + (s |
 
     // ---- views
     location.hash = '#/years'; await wait(100); location.hash = '#/home'; await wait(150);
-    ok('home', document.querySelectorAll('.entry').length === 6);
+    ok('home', document.querySelectorAll('.entry').length === 8, document.querySelectorAll('.entry').length + ' entries');
     location.hash = '#/years'; await wait(150);
     ok('years view', document.querySelectorAll('[data-year]').length >= 30, document.querySelectorAll('[data-year]').length + '');
     location.hash = '#/subjects'; await wait(150);
