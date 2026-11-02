@@ -5,7 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>西综真题 · 刷题本</title>
 <meta name="description" content="西医综合 306 历年真题离线刷题：按年份 / 科目 / 章节 / 分层，随机组题，手写批注，笔记与错题本。">
-<link rel="stylesheet" href="css/app.css?v=20261103m">
+<link rel="stylesheet" href="css/app.css?v=20261103n">
+<script>
+/* 尽早应用主题，避免闪白 */
+try {
+  var qs = (location.search.match(/[?&]theme=(dark|light)/) || [])[1];
+  var t = qs || localStorage.getItem('xz:theme');
+  if (!t) t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  if (localStorage.getItem('xz:noinvert') === '1') document.documentElement.classList.add('no-invert');
+} catch (e) {}
+</script>
 </head>
 <body>
 
@@ -26,7 +36,8 @@
     <div class="topbar-r">
       <input id="q-search" class="search" type="search" placeholder="搜题干 / 年份代号" autocomplete="off" enterkeyhint="search">
       <button class="icon-btn" id="btn-search" title="搜索">🔍</button>
-      <button class="icon-btn" id="btn-sync" title="云端同步">☁</button>
+      <button class="icon-btn" id="btn-theme" title="夜间模式">☾</button>
+  <button class="icon-btn" id="btn-sync" title="云端同步">☁</button>
       <button class="icon-btn" id="btn-settings" title="设置">⚙</button>
     </div>
   </div>
@@ -62,14 +73,14 @@
   </div>
 </footer>
 
-<script src="data/meta.js?v=20261103m"></script>
-<script src="js/zip.js?v=20261103m"></script>
-<script src="js/store.js?v=20261103m"></script>
-<script src="js/bank.js?v=20261103m"></script>
-<script src="js/card.js?v=20261103m"></script>
-<script src="js/mapview.js?v=20261103m"></script>
-<script src="js/session.js?v=20261103m"></script>
-<script src="js/views.js?v=20261103m"></script>
-<script src="js/app.js?v=20261103m"></script>
+<script src="data/meta.js?v=20261103n"></script>
+<script src="js/zip.js?v=20261103n"></script>
+<script src="js/store.js?v=20261103n"></script>
+<script src="js/bank.js?v=20261103n"></script>
+<script src="js/card.js?v=20261103n"></script>
+<script src="js/mapview.js?v=20261103n"></script>
+<script src="js/session.js?v=20261103n"></script>
+<script src="js/views.js?v=20261103n"></script>
+<script src="js/app.js?v=20261103n"></script>
 </body>
 </html>
