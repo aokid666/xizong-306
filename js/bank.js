@@ -62,7 +62,7 @@
         if (self._loading[name]) return self._loading[name];
         const code = (self.subjectMeta(name) || {}).code;
         const file = (self._manifest && self._manifest.files && self._manifest.files[name]) || ('bank-' + code + '.js');
-        self._loading[name] = self._loadScript(BASE + 'data/' + file).then(function () {
+        self._loading[name] = self._loadScript(BASE + 'data/' + file + '?v=20261103a').then(function () {
           const rows = window.XZ.bank[name] || [];
           const arr = [];
           for (let i = 0; i < rows.length; i++) {
@@ -268,7 +268,7 @@
       const self = this;
       if (this.mock) return Promise.resolve(this.mock);
       if (this._mockP) return this._mockP;
-      this._mockP = this._loadScript(BASE + 'data/mock.js').then(function () {
+      this._mockP = this._loadScript(BASE + 'data/mock.js?v=20261103a').then(function () {
         const d = window.XZ.mock || { rows: [] };
         const list = d.rows.map(function (r, i) {
           const q = {
@@ -333,7 +333,7 @@
     ensureYicuo() {
       if (window.XZ && window.XZ.yicuo) return Promise.resolve(window.XZ.yicuo);
       if (this._ycP) return this._ycP;
-      this._ycP = this._loadScript(BASE + 'data/yicuo.js').then(function () { return window.XZ.yicuo || {}; });
+      this._ycP = this._loadScript(BASE + 'data/yicuo.js?v=20261103a').then(function () { return window.XZ.yicuo || {}; });
       return this._ycP;
     },
     yicuoMap() { return (window.XZ && window.XZ.yicuo) || {}; },
