@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>uitest</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>#log{font:12px/1.5 monospace;white-space:pre-wrap;padding:14px;background:#fafafa;border-bottom:1px solid #ddd}</style>
+</head>
+<body>
+<header class="topbar"><div class="topbar-in">
+  <a class="brand" href="#/home">西综真题</a>
+  <nav class="nav"><a href="#/years">按年份</a><a href="#/subjects">按科目</a><a href="#/build">组题</a><a href="#/lists">收藏/错题</a><a href="#/stats">统计</a></nav>
+  <div class="topbar-r"><input id="q-search" class="search" placeholder="搜题干"><button class="icon-btn" id="btn-settings">⚙</button></div>
+</div></header>
+<pre id="log">running…</pre>
+<main id="app" class="wrap"></main>
+<div id="toast" class="toast" hidden></div>
+<div id="drawer" class="drawer" hidden>
+  <div class="drawer-mask" data-close></div>
+  <aside class="drawer-panel"><header class="drawer-hd"><h2 id="drawer-title"></h2><button class="icon-btn" data-close>X</button></header><div id="drawer-body" class="drawer-bd"></div></aside>
+</div>
+<div id="modal" class="modal" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-panel"><header class="modal-hd"><h2 id="modal-title"></h2><button class="icon-btn" data-close>X</button></header><div id="modal-body" class="modal-bd"></div><footer id="modal-foot" class="modal-ft"></footer></div>
+</div>
+
+<script>window.__errors = []; window.onerror = function (m, s, l) { window.__errors.push(m + ' @' + (s || '').split('/').pop() + ':' + l); };</script>
+<script src="../data/meta.js"></script>
+<script src="../js/store.js"></script>
+<script src="../js/bank.js"></script>
+<script src="../js/card.js"></script>
+<script src="../js/session.js"></script>
+<script src="../js/views.js"></script>
+<script src="../js/app.js"></script>
+<script>
+(function () {
+  const lines = []; let fail = 0;
+  const log = function (t) { lines.push(t); document.getElementById('log').textContent = lines.join('\n'); };
+  function ok(name, cond, extra) {
+    lines.push((cond ? '[PASS] ' : '[FAIL] ') + name + (extra != null ? '  — ' + extra : ''));
+    if (!cond) fail++;
+    document.getElementById('log').textContent = lines.join('\n');
+  }
+  const wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  function done() {
+    lines.push(''); lines.push('JS errors: ' + (window.__errors.length ? window.__errors.join(' | ') : 'none'));
+    lines.push(fail ? ('FAILED ' + fail) : 'ALL PASS');
+    document.getElementById('log').textContent = lines.join('\n');
+    window.scrollTo(0, 0);
+    document.title = fail ? 'FAIL ' + fail : 'OK';
+  }
+  const $ = function (s) { return document.querySelector(s); };
+  const $$ = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
+
+  (async function () {
+    await Store.init();
+    for (let i = 0; i < 100 && !$('.hero'); i++) await wait(50);
+    ok('app booted', !!$('.hero'));
+
+    /* ---------- 1. 按年份流程 ---------- */
+    location.hash = '#/years'; await wait(200);
+    const yrow = $('[data-year="2020"]');
+    ok('year row', !!yrow);
+    yrow.click(); await wait(120);
+    ok('year modal', !!$('#modal:not([hidden])') && /2020/.test($('#modal-title').textContent));
+    // 选滚动 + 按题号
+    const startBtn = $$('#modal-foot .btn').filter(function (b) { return /开始/.test(b.textContent); })[0];
+    ok('year modal start btn', !!startBtn);
+    startBtn.click();
+    for (let i = 0; i < 120 && !$('.session-bar'); i++) await wait(50);
+    ok('session from year', !!$('.session-bar'), $('.session-bar') && $('.session-bar [data-prog]').textContent);
+    ok('year cards rendered', $$('.card').length > 100, $$('.card').length + ' cards');
+
+    /* ---------- 2. 高亮 / 批注 ---------- */
+    const card = $('.card');
+    const stem = card.querySelector('.stem');
+    const firstText = stem.firstChild;
+    if (firstText && firstText.nodeType === 3) {
+      const r = document.createRange();
+      r.setStart(firstText, 0); r.setEnd(firstText, Math.min(6, firstText.nodeValue.length));
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      stem.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      await wait(80);
+      ok('float toolbar on select', !!$('.float-tools'));
+      const hlBtn = $$('.float-tools button').filter(function (b) { return /高亮/.test(b.textContent); })[0];
+      ok('highlight button', !!hlBtn);
+      if (hlBtn) hlBtn.click();
+      await wait(80);
+      ok('mark saved', Store.marks(card._item.qs[0].id).length === 1, Store.marks(card._item.qs[0].id).length + '');
+      ok('mark drawn', !!card.querySelector('mark.hl'));
+    } else { ok('stem text node', false); }
+
+    /* ---------- 3. 收藏 / 标记 / 笔记 ---------- */
+    const qid = card._item.qs[0].id;
+    card.querySelector('[data-act="fav"]').click(); await wait(50);
+    ok('favorite toggled', Store.isFav(qid));
+    card.querySelector('[data-act="flag"]').click(); await wait(80);
+    ok('flag modal', !!$('#modal:not([hidden])'));
+    const flagBtn = $$('#modal-body button').filter(function (b) { return b.textContent === '争议'; })[0];
+    flagBtn.click(); await wait(80);
+    ok('flag stored', Store.flag(qid) && Store.flag(qid).t === 'dispute');
+    card.querySelector('[data-act="note"]').click(); await wait(80);
+    const ta = card.querySelector('[data-note-input]');
+    ok('note panel', !!ta);
+    if (ta) {
+      ta.value = '记一笔：注意鉴别';
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      await wait(800);
+      ok('note stored', Store.note(qid) && Store.note(qid).t.indexOf('鉴别') >= 0, JSON.stringify(Store.note(qid)));
+    }
+
+    /* ---------- 4. 手写 ---------- */
+    card.querySelector('[data-act="hw"]').click(); await wait(80);
+    ok('hw mode on', card.classList.contains('hw-on'));
+    const cv = card.querySelector('canvas.hw-layer');
+    ok('canvas sized', cv && cv.width > 100 && cv.height > 100, cv && (cv.width + 'x' + cv.height));
+    // 模拟手写一笔
+    let fired = 0;
+    cv.addEventListener('pointerdown', function () { fired++; });
+    ok('hw bound', !!cv._bound, 'bound=' + cv._bound + ' tool=' + cv._tool);
+    const rect = cv.getBoundingClientRect();
+    cv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: rect.left + 30, clientY: rect.top + 30, pointerId: 1 }));
+    cv.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.left + 90, clientY: rect.top + 60, pointerId: 1 }));
+    cv.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: rect.left + 90, clientY: rect.top + 60, pointerId: 1 }));
+    await wait(120);
+    ok('hw event fired', fired === 1, 'fired=' + fired + ' rect=' + Math.round(rect.left) + ',' + Math.round(rect.top));
+    ok('hw stroke stored', !!(Store.hw(qid) && Store.hw(qid).s.length === 1), JSON.stringify(Store.hw(qid) || null).slice(0, 80));
+    card.querySelector('[data-act="hw"]').click(); await wait(40);
+
+    /* ---------- 5. 逐题提交 ---------- */
+    const opt = card.querySelector('.opt');
+    opt.click(); await wait(40);
+    const sub = card.querySelector('[data-act="submit"]');
+    sub.click(); await wait(60);
+    ok('verdict shown', !card.querySelector('.verdict').hidden);
+    ok('explain visible after submit', (function () { const e = card.querySelector('details.exp'); return e && !e.hidden; })());
+
+    /* ---------- 6. 单题模式 ---------- */
+    $('[data-tool="mode"]').click(); await wait(150);
+    ok('paged mode on', $('.pager') && !$('.pager').hidden);
+    ok('one card in paged', $$('.card').length === 1);
+    $('[data-page="next"]').click(); await wait(120);
+    ok('paged next', $$('.card').length === 1 && $('[data-prog]').textContent.indexOf('2 /') === 0, $('[data-prog]').textContent);
+    $('[data-tool="sheet"]').click(); await wait(80);
+    ok('sheet opens', $$('.sheet button').length > 100, $$('.sheet button').length + '');
+    U.closeDrawer(); await wait(60);
+
+    /* ---------- 7. 退出 + 继续上次 ---------- */
+    const before = $('[data-prog]').textContent;
+    $('[data-tool="exit"]').click(); await wait(80);
+    const exitBtn = $$('#modal-foot .btn').filter(function (b) { return b.textContent === '退出'; })[0];
+    exitBtn.click(); await wait(200);
+    ok('back home after exit', !!$('.hero'));
+    ok('resume banner', !!$('.resume'), $('.resume') ? $('.resume').textContent.trim().slice(0, 40) : '');
+    const resumeBtn = $('[data-act="resume"]');
+    if (resumeBtn) { resumeBtn.click(); }
+    for (let i = 0; i < 120 && !$('.session-bar'); i++) await wait(50);
+    ok('resumed session', !!$('.session-bar'), $('[data-prog]') && $('[data-prog]').textContent);
+    ok('resume kept progress', $('[data-prog]').textContent.indexOf('已做 1') > 0, $('[data-prog]').textContent);
+    Session.teardown(); await wait(60);
+
+    /* ---------- 8. 分组提交 ---------- */
+    Store.set('submitMode', 'chunk');
+    Store.set('chunk', 2);
+    Store.set('mode', 'scroll');
+    await Bank.ensure(['生理学']);
+    const items = Bank.itemsBySubject('生理学').slice(0, 4);
+    Session.start({ title: 'chunk test', items: items });
+    await wait(120);
+    const seps = $$('.chunk-sep');
+    ok('chunk separators', seps.length === 1, seps.length + '');
+    const c0 = $$('.card')[0], c1 = $$('.card')[1];
+    c0.querySelector('.opt').click();
+    c1.querySelector('.opt').click();
+    await wait(60);
+    const chunkBtn = $('[data-tool="submit-chunk"]');
+    ok('chunk button', !!chunkBtn);
+    if (chunkBtn) chunkBtn.click();
+    await wait(100);
+    ok('chunk submitted 2', Store.prog(items[0].qs[0].id) && Store.prog(items[1].qs[0].id));
+    Session.teardown(); await wait(60);
+
+    /* ---------- 9. 组题流程 ---------- */
+    Store.set('submitMode', 'single');
+    Store.set('mode', 'scroll');
+    location.hash = '#/build'; await wait(200);
+    const countInput = $('[data-count]');
+    countInput.value = '5';
+    $('[data-act="go"]').click();
+    for (let i = 0; i < 160 && !$('.session-bar'); i++) await wait(50);
+    ok('build session', !!$('.session-bar'), $('[data-prog]') && $('[data-prog]').textContent);
+    const n = $$('.card').length;
+    ok('build items count', n >= 1 && n <= 5, n + ' cards');
+    Session.teardown(); await wait(60);
+
+    /* ---------- 10. 统计 / 收藏列表 ---------- */
+    location.hash = '#/stats'; await wait(600);
+    ok('stats numbers', $$('.stat').length === 6, $$('.stat b')[0].textContent);
+    location.hash = '#/lists'; await wait(1200);
+    ok('lists has rows', $$('#list-body .row').length > 0, $$('#list-body .row').length + '');
+    location.hash = '#/settings'; await wait(200);
+    const expo = $$('[data-act="export"]')[0];
+    ok('settings export btn', !!expo);
+
+    done();
+  })().catch(function (e) {
+    lines.push('[FATAL] ' + (e && e.stack || e)); done();
+  });
+})();
+</script>
+</body>
+</html>
