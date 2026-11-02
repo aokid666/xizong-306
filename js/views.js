@@ -1056,6 +1056,11 @@
       '<div class="seg" data-setseg="submitMode"><button data-v="single">每题提交</button><button data-v="chunk">每 N 题一起提交</button><button data-v="all">整卷提交</button></div>' +
       '<input class="input" type="number" min="2" max="100" data-setnum="chunk" style="width:80px">' +
       '</div></div>';
+    html += '<div class="field"><div class="k">外观</div><div class="v">' +
+      '<div class="seg" data-setseg="theme"><button data-v="light">白天</button><button data-v="dark">夜间</button></div>' +
+      '<span class="hint" style="margin-left:8px">夜间模式下图片/导图自动反色</span><br>' +
+      '<label class="chk"><input type="checkbox" data-setbool="imgInvert" checked> 夜间模式图片、导图反色（关掉保持原色）</label>' +
+      '</div></div>';
     html += '<div class="field"><div class="k">题干信息</div><div class="v">' +
       '<label class="chk"><input type="checkbox" data-setbool="hideMeta"> 做题时先隐藏「科目·章节·知识点」标签，提交后再显示</label>' +
       '</div></div>';
@@ -1131,6 +1136,10 @@
         Store.set(key, b.dataset.v);
         if (key === 'fontSize' || key === 'mode') { }
         d[key] = b.dataset.v;
+        if (key === 'theme') {
+          U.applyTheme(b.dataset.v);
+          U.toast(b.dataset.v === 'dark' ? '已切换到夜间模式' : '已切换到白天模式');
+        }
         syncSegs();
         return;
       }
@@ -1184,7 +1193,14 @@
         app().querySelector('[data-fs]').textContent = e.target.value + 'px';
       }
       if (e.target.matches('[data-setnum="chunk"]')) Store.set('chunk', Math.max(2, +e.target.value || 10));
-      if (e.target.matches('[data-setbool]')) Store.set(e.target.dataset.setbool, e.target.checked);
+      if (e.target.matches('[data-setbool]')) {
+        Store.set(e.target.dataset.setbool, e.target.checked);
+        if (e.target.dataset.setbool === 'imgInvert') {
+          try { localStorage.setItem('xz:noinvert', e.target.checked ? '0' : '1'); } catch (err) { }
+          document.documentElement.classList.toggle('no-invert', !e.target.checked);
+          U.toast(e.target.checked ? '图片/导图将在夜间反色' : '图片/导图保持原色');
+        }
+      }
       if (e.target.matches('[data-file]')) {
         const f = e.target.files[0];
         if (!f) return;
