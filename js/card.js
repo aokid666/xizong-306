@@ -66,6 +66,9 @@
     const q0 = item.qs[0];
     const bits = [];
     if (q0.multi) bits.push(tagHTML('多选', 'multi'));
+    const pr = Store.prog(q0.id);
+    if (pr) bits.push('<span class="done-slot">' + tagHTML(pr.ok ? '已做 · 对' : '已做 · 错', 'done ' + (pr.ok ? 'ok' : 'no')) + '</span>');
+    else bits.push('<span class="done-slot"></span>');
     if (q0.mock) {
       bits.push(tagHTML(q0.set || '模拟题'));
       bits.push(tagHTML(q0.subj + ' · ' + (q0.chapter || '') + (q0.sec ? ' · ' + q0.sec : ''), 'metatag'));
@@ -254,6 +257,16 @@
     if (rv) rv.style.display = allRes ? 'none' : '';
     const hint = card.querySelector('[data-hint]');
     if (hint) hint.textContent = allRes ? '' : (hasSel ? '' : '选择选项后提交');
+    // 已做标签：本次会话提交后立刻更新
+    const slot = card.querySelector('.done-slot');
+    if (slot) {
+      const r0 = ctx.res(qs[0].id);
+      const p0 = Store.prog(qs[0].id);
+      if (r0) slot.innerHTML = tagHTML(r0.ok ? '已做 · 对' : '已做 · 错', 'done ' + (r0.ok ? 'ok' : 'no'));
+      else if (p0) slot.innerHTML = tagHTML(p0.ok ? '已做 · 对' : '已做 · 错', 'done ' + (p0.ok ? 'ok' : 'no'));
+      else slot.innerHTML = '';
+    }
+
     // 题干标签：设置里可隐藏，作答后再显示
     const hideMeta = !!Store.get('hideMeta') && !allRes;
     card.querySelectorAll('.metatag').forEach(function (el) { el.hidden = hideMeta; });
@@ -277,13 +290,16 @@
     const noteBtn = card.querySelector('.card-acts [data-act="note"]');
     if (noteBtn) {
       const n = Store.note(q0.id);
-      noteBtn.classList.toggle('on', !!n && (!!n.t || (n.imgs && n.imgs.length)));
+      noteBtn.classList.toggle('on', !!(n && n.blocks && n.blocks.length));
     }
     const hwBtn = card.querySelector('[data-act="hw"]');
-    if (hwBtn) hwBtn.classList.toggle('on', card.classList.contains('hw-on'));
+    if (hwBtn) {
+      const hw = Store.hw(q0.id);
+      hwBtn.classList.toggle('on', card.classList.contains('hw-on') || !!(hw && hw.s && hw.s.length));
+    }
   }
 
-  /* ---------------- 笔记面板 ---------------- */
+﻿  /* ---------------- 笔记面板：文字 / 图片 段落，可自由排序 ---------------- */
   function openNote(card, qid, ctx) {
     const subq = card.querySelector('.subq[data-qid="' + qid + '"]') || card;
     let wrap = subq.querySelector('.note-wrap');
@@ -291,92 +307,137 @@
       wrap = U.el('div', { class: 'note-wrap' });
       subq.appendChild(wrap);
     }
-    if (wrap.dataset.open === '1') { wrap.dataset.open = ''; wrap.style.display = 'none'; return; }
+    if (wrap.dataset.open === '1') {
+      wrap.dataset.open = '';
+      wrap.style.display = 'none';
+      // 关闭时清掉没写字的空段落
+      const n0 = Store.note(qid);
+      if (n0) Store.setNoteBlocks(qid, n0.blocks);
+      if (card) refreshActs(card, card._item);
+      return;
+    }
     wrap.dataset.open = '1';
     wrap.style.display = 'block';
+    const n1 = Store.note(qid);
+    if (!n1 || !n1.blocks || !n1.blocks.length) Store.addNoteBlock(qid, { k: 't', v: '' });
     renderNote(wrap, qid, card);
   }
 
-  function renderNote(wrap, qid, card) {
-    const n = Store.note(qid) || { t: '', imgs: [] };
-    wrap.innerHTML =
-      '<textarea placeholder="写点笔记……（支持粘贴图片）" data-note-input>' + esc(n.t || '') + '</textarea>' +
-      '<div class="note-imgs" data-note-imgs></div>' +
-      '<div class="note-tools"><label class="chk"><input type="file" accept="image/*" multiple data-note-file hidden>＋ 添加图片</label>' +
-      '<span>可直接 Ctrl+V 粘贴截图</span><span style="flex:1"></span>' +
-      '<span data-note-saved></span></div>';
-
-    const ta = wrap.querySelector('[data-note-input]');
-    const save = U.debounce(function () {
-      Store.setNote(qid, ta.value);
-      const s = wrap.querySelector('[data-note-saved]');
-      if (s) s.textContent = '已保存 ' + U.fmtTime(Date.now()).slice(11);
-      if (card) refreshActs(card, card._item);
-    }, 600);
-    ta.addEventListener('input', save);
-
-    ta.addEventListener('paste', function (e) {
-      const items = e.clipboardData && e.clipboardData.items;
-      if (!items) return;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') === 0) {
-          e.preventDefault();
-          addImage(qid, items[i].getAsFile(), wrap, card);
-        }
-      }
+  function noteImgEl(wrap, id) {
+    const holder = wrap.querySelector('[data-img-wrap="' + id + '"]');
+    if (!holder) return;
+    holder.innerHTML = '<div class="nb-loading">图片加载中…</div>';
+    Store.getImageOrig(id).then(function (orig) {
+      return orig || Store.getImage(id);
+    }).then(function (src) {
+      if (!src) { holder.innerHTML = '<div class="nb-loading">图片已丢失</div>'; return; }
+      holder.innerHTML = '';
+      const img = U.el('img', { alt: '笔记图片', src: src });
+      img.addEventListener('click', function () {
+        U.modal({ title: '笔记图片（点击可看原图）', body: '<img src="' + src + '" style="max-width:100%">', buttons: [{ label: '关闭', cls: 'primary' }] });
+      });
+      holder.appendChild(img);
     });
-
-    const file = wrap.querySelector('[data-note-file]');
-    file.addEventListener('change', function () {
-      for (let i = 0; i < file.files.length; i++) addImage(qid, file.files[i], wrap, card);
-      file.value = '';
-    });
-
-    renderNoteImgs(wrap, qid, card);
   }
 
-  function renderNoteImgs(wrap, qid, card) {
-    const box = wrap.querySelector('[data-note-imgs]');
-    if (!box) return;
-    const n = Store.note(qid) || { imgs: [] };
-    box.innerHTML = '';
-    (n.imgs || []).forEach(function (id) {
-      const d = U.el('div', { class: 'im' });
-      const img = U.el('img', { alt: '笔记图片' });
-      Store.getImage(id).then(function (src) {
-        if (src) { img.src = src; return; }
-        Store.getImageOrig(id).then(function (o) { if (o) img.src = o; });
-      });
-      img.addEventListener('click', async function () {
-        const orig = (await Store.getImageOrig(id)) || img.src;
-        if (!orig) return;
-        U.modal({
-          title: '笔记图片（原图）', body: '<img src="' + orig + '" style="max-width:100%">',
-          buttons: [{ label: '关闭', cls: 'primary' }]
-        });
-      });
-      const rm = U.el('button', { class: 'rm', title: '删除这张图片' }, '✕');
-      rm.addEventListener('click', function (e) {
-        e.stopPropagation();
-        U.modal({
-          title: '删除这张笔记图片？',
-          body: '<p>会把这张图片从本机删除；如果开了云端同步，云端也会一起删除。删除后无法恢复。</p>',
-          buttons: [
-            { label: '取消' },
-            {
-              label: '删除', cls: 'primary', onClick: function () {
-                Store.removeNoteImage(qid, id);
-                renderNoteImgs(wrap, qid, card);
-                if (card) refreshActs(card, card._item);
-                U.toast('已删除');
-              }
-            }
-          ]
-        });
-      });
-      d.appendChild(img); d.appendChild(rm);
-      box.appendChild(d);
+  function renderNote(wrap, qid, card) {
+    const n = Store.note(qid) || { blocks: [] };
+    const blocks = n.blocks || [];
+    let html = '';
+    if (!blocks.length) {
+      html += '<div class="nb-empty hint">还没有笔记。点下面「＋ 文字 / ＋ 图片」，或直接 Ctrl+V 粘贴截图。</div>';
+    }
+    html += '<div class="nb-list">';
+    blocks.forEach(function (b, idx) {
+      const bar = '<div class="nb-bar">' +
+        '<span class="nb-idx">' + (b.k === 't' ? '文字' : '图片') + ' ' + (idx + 1) + '</span>' +
+        '<span style="flex:1"></span>' +
+        '<button class="icon-btn" data-nb="up" title="上移">↑</button>' +
+        '<button class="icon-btn" data-nb="down" title="下移">↓</button>' +
+        '<button class="icon-btn" data-nb="del" title="删除这一段">✕</button></div>';
+      if (b.k === 't') {
+        html += '<div class="nb" data-bid="' + b.i + '">' + bar +
+          '<textarea class="nb-text" data-nb-text placeholder="写点什么…">' + esc(b.v || '') + '</textarea></div>';
+      } else {
+        html += '<div class="nb" data-bid="' + b.i + '">' + bar +
+          '<div class="nb-img" data-img-wrap="' + b.v + '"></div></div>';
+      }
     });
+    html += '</div>';
+    html += '<div class="note-tools">' +
+      '<button class="btn ghost sm" data-nb="addtext">＋ 文字</button>' +
+      '<button class="btn ghost sm" data-nb="addimg">＋ 图片</button>' +
+      '<span class="hint">↑↓ 调顺序 · Ctrl+V 粘贴截图 · 图片按原图完整显示</span>' +
+      '<span style="flex:1"></span><span data-note-saved></span></div>';
+    wrap.innerHTML = html;
+
+    blocks.forEach(function (b) { if (b.k === 'i') noteImgEl(wrap, b.v); });
+
+    const saveTip = wrap.querySelector('[data-note-saved]');
+    const markSaved = function () { if (saveTip) saveTip.textContent = '已保存 ' + U.fmtTime(Date.now()).slice(11); };
+
+    wrap.querySelectorAll('textarea[data-nb-text]').forEach(function (ta) {
+      const bid = ta.closest('.nb').dataset.bid;
+      const save = U.debounce(function () {
+        Store.updateNoteBlock(qid, bid, ta.value);
+        markSaved();
+        if (card) refreshActs(card, card._item);
+      }, 500);
+      ta.addEventListener('input', save);
+      ta.addEventListener('paste', function (e) {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') === 0) {
+            e.preventDefault();
+            addImage(qid, items[i].getAsFile(), wrap, card);
+          }
+        }
+      });
+    });
+
+    wrap.onclick = function (e) {
+      const b = e.target.closest('[data-nb]');
+      if (!b) return;
+      const act = b.dataset.nb;
+      const nb = b.closest('.nb');
+      const bid = nb && nb.dataset.bid;
+      if (act === 'addtext') {
+        Store.addNoteBlock(qid, { k: 't', v: '' });
+        renderNote(wrap, qid, card);
+        const tas = wrap.querySelectorAll('textarea[data-nb-text]');
+        if (tas.length) tas[tas.length - 1].focus();
+        return;
+      }
+      if (act === 'addimg') {
+        const inp = U.el('input', { type: 'file', accept: 'image/*', multiple: true });
+        inp.addEventListener('change', function () {
+          for (let i = 0; i < inp.files.length; i++) addImage(qid, inp.files[i], wrap, card);
+        });
+        inp.click();
+        return;
+      }
+      if (act === 'up' || act === 'down') {
+        Store.moveNoteBlock(qid, bid, act === 'up' ? -1 : 1);
+        renderNote(wrap, qid, card);
+        return;
+      }
+      if (act === 'del') {
+        const isImg = !!nb.querySelector('.nb-img');
+        U.modal({
+          title: isImg ? '删除这张图片？' : '删除这段文字？',
+          body: '<p>' + (isImg ? '图片会从本机删除；开了云端同步的话云端也会删。' : '这段文字会删除。') + '删除后无法恢复。</p>',
+          buttons: [{ label: '取消' }, {
+            label: '删除', cls: 'primary', onClick: function () {
+              Store.removeNoteBlock(qid, bid);
+              renderNote(wrap, qid, card);
+              if (card) refreshActs(card, card._item);
+              U.toast('已删除');
+            }
+          }]
+        });
+      }
+    };
   }
 
   function addImage(qid, file, wrap, card) {
@@ -384,12 +445,11 @@
     const rd = new FileReader();
     rd.onload = async function () {
       const id = U.uid();
-      const src = rd.result;                 // 原图，原样保存
+      const src = rd.result;
       await Store.putImageOrig(id, src);
-      const disp = await U.compressDataUrl(src, 1400, 0.82);   // 缩略图，仅用于列表显示
-      await Store.putImage(id, disp);
+      await Store.putImage(id, await U.compressDataUrl(src, 1400, 0.82));
       Store.addNoteImage(qid, id);
-      renderNoteImgs(wrap, qid, card);
+      if (wrap) renderNote(wrap, qid, card);
       if (card) refreshActs(card, card._item);
     };
     rd.readAsDataURL(file);
