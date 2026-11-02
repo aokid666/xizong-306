@@ -70,7 +70,7 @@
       entry('收藏 / 错题 / 标记', '回顾收藏、做错的题，以及标记为过时、争议的题', '#/lists') +
       entry('学习统计', '各科目进度与正确率', '#/stats') +
       entry('设置与备份', '解析显示方式、提交方式、数据导出导入', '#/settings') +
-      entry('使用说明', '题库来源、合并规则与数据格式（GitHub README）', 'https://github.com/aokid666/xizong-306#readme', true) +
+      entry('病例题专项', '按系统归类的 319 组病例题（呼吸/循环/消化/骨科…）', '#/cases') +
       '</div>';
 
     html += '<div style="margin-top:40px" class="hint">提示：病例题（共用题干的多小问）在组题与随机时始终作为一个整体，不会被拆开；提交时也只给一个提交按钮。</div>';
@@ -790,6 +790,44 @@
         const items = Bank.mockItemsByChapter(s.name, ch.t, sec);
         startItems(items, '模拟题 · ' + s.name + ' · ' + ch.t + (sec ? ' · ' + sec : ''), s.name);
       });
+    });
+  };
+
+  /* ================= 病例题专项 ================= */
+  Views.cases = function () {
+    shell('<div class="empty">正在载入病例题…</div>');
+    Bank.ensureAll().then(function () { return Bank.ensureCases(); }).then(function () {
+      const topics = Bank.caseTopics();
+      const total = topics.reduce(function (a, t) { return a + t.n; }, 0);
+      let html = crumb([{ t: '首页', href: '#/home' }, { t: '病例题专项' }]);
+      html += '<div class="page-hd"><h1>病例题专项</h1><div class="sub">' +
+        '来自《病例分析&狂背·临床学科病例题真题》，共 ' + topics.length + ' 个系统、' + total + ' 组病例。' +
+        '题目与真题库是同一批题，答案、笔记、手写、错题全部互通。</div></div>';
+      html += '<div class="tree-tools">' +
+        '<button class="btn sm" data-topic="__all">全部病例题（顺序）</button>' +
+        '<button class="btn sm" data-topic="__all" data-rand="1">全部（随机）</button></div>';
+      html += '<div class="list">';
+      topics.forEach(function (t) {
+        html += '<div class="row" data-topic="' + esc(t.t) + '"><div class="grow">' +
+          '<div class="t">' + esc(t.t) + '</div><div class="d">' + t.n + ' 组病例</div></div>' +
+          '<span class="num">' + t.n + '</span><span class="go">开始 →</span></div>';
+      });
+      html += '</div>';
+      shell(html);
+      app().addEventListener('click', function (e) {
+        const b = e.target.closest('[data-topic]');
+        if (!b) return;
+        const topic = b.dataset.topic;
+        loadThen(Bank.subjectNames(), function () {
+          let items = Bank.caseItems(topic === '__all' ? null : topic);
+          if (!items.length) { U.toast('没有题目'); return; }
+          if (b.dataset.rand) Bank.shuffle(items);
+          startItems(items, topic === '__all' ? '病例题 · 全部' : '病例题 · ' + topic,
+            items.length + ' 组');
+        });
+      });
+    }).catch(function (e) {
+      shell('<div class="empty">病例题载入失败：' + esc(e.message) + '</div>');
     });
   };
 
