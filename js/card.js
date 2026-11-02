@@ -355,9 +355,7 @@
       if (!src) { holder.innerHTML = '<div class="nb-loading">图片已丢失</div>'; return; }
       holder.innerHTML = '';
       const img = U.el('img', { alt: '笔记图片', src: src });
-      img.addEventListener('click', function () {
-        U.modal({ title: '笔记图片（点击可看原图）', body: '<img src="' + src + '" style="max-width:100%">', buttons: [{ label: '关闭', cls: 'primary' }] });
-      });
+      img.addEventListener('click', function () { U.zoom(src, '笔记图片'); });
       holder.appendChild(img);
     });
   }
