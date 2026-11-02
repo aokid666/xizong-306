@@ -402,6 +402,27 @@ table.tb td.n{font-family:var(--mono);text-align:right}
 .sheet-hd{margin:16px 0 8px;font-size:13px;font-weight:600;color:var(--ink-2)}
 .sheet-hd:first-of-type{margin-top:6px}
 
+/* ---------- 已做标签 ---------- */
+.tag.done.ok{border-color:#c3ddc9;background:var(--green-bg);color:var(--green)}
+.tag.done.no{border-color:#e4c4c4;background:var(--red-bg);color:var(--red)}
+
+/* ---------- 笔记段落 ---------- */
+.nb-list{display:flex;flex-direction:column;gap:10px}
+.nb{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
+.nb-bar{display:flex;align-items:center;gap:2px;padding:4px 8px;background:var(--paper-2);border-bottom:1px solid var(--line-2)}
+.nb-idx{font-size:11.5px;color:var(--faint);margin-right:6px}
+.nb-bar .icon-btn{width:26px;height:26px;font-size:12px;color:var(--muted)}
+.nb-bar .icon-btn:hover{color:var(--ink)}
+.nb-text{
+  display:block;width:100%;min-height:64px;border:none;resize:vertical;padding:10px 12px;
+  font-size:13.5px;line-height:1.7;background:#fff;
+}
+.nb-text:focus{outline:none;background:#fffefb}
+.nb-img{padding:8px;background:#fcfcfb}
+.nb-img img{display:block;width:100%;height:auto;border-radius:4px;cursor:zoom-in}
+.nb-loading{font-size:12px;color:var(--faint);padding:8px 2px}
+.nb-empty{padding:8px 2px}
+
 /* ---------- 章节树：年份范围内无题时变灰 ---------- */
 .tree-ch.dim > summary{opacity:.4}
 .tree-ch.dim > summary .caret{opacity:.5}
