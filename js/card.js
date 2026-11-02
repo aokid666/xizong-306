@@ -798,9 +798,112 @@
     };
 
     root.addEventListener('mouseup', handleSel);
-    root.addEventListener('touchend', function () {
+
+    /* ---- 触屏（iPad/iPhone）：自己实现长按选中 + 拖动扩展 ---- */
+    const TEXT_SEL = '.stem,.opt .t,.vignette,.exp .body,.nb-text';
+    let touchAnchor = null, touchTimer = null, touchSelecting = false;
+
+    function caretAt(x, y) {
+      if (document.caretRangeFromPoint) return document.caretRangeFromPoint(x, y);
+      if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(x, y);
+        if (!pos) return null;
+        const r = document.createRange();
+        r.setStart(pos.offsetNode, pos.offset);
+        r.collapse(true);
+        return r;
+      }
+      return null;
+    }
+
+    function sentenceRange(node, offset) {
+      const txt = node.nodeValue || '';
+      const stops = '。！？；';
+      let start = 0, end = txt.length;
+      for (let i = Math.min(offset, txt.length) - 1; i >= 0; i--) {
+        if (stops.indexOf(txt[i]) >= 0) { start = i + 1; break; }
+      }
+      for (let i = Math.max(0, offset); i < txt.length; i++) {
+        if (stops.indexOf(txt[i]) >= 0) { end = i + 1; break; }
+      }
+      // 去掉首尾空白
+      while (start < end && /\s/.test(txt[start])) start++;
+      while (end > start && /\s/.test(txt[end - 1])) end--;
+      const r = document.createRange();
+      try { r.setStart(node, start); r.setEnd(node, end); } catch (e) { return null; }
+      return r;
+    }
+
+    function selectRange(r) {
       const sel = window.getSelection();
-      if (sel && !sel.isCollapsed) handleSel();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+
+    function beginTouchSelect(x, y) {
+      const c = caretAt(x, y);
+      if (!c || !c.startContainer || c.startContainer.nodeType !== 3) {
+        const el = document.elementFromPoint(x, y);
+        if (!el || !el.closest || !el.closest(TEXT_SEL)) return;
+        return;
+      }
+      const host = c.startContainer.parentElement && c.startContainer.parentElement.closest(TEXT_SEL);
+      if (!host || !root.contains(host)) return;
+      const r = sentenceRange(c.startContainer, c.startOffset);
+      if (!r || r.collapsed) return;
+      selectRange(r);
+      touchAnchor = { node: r.startContainer, offset: r.startOffset };
+      touchSelecting = true;
+      try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) { }
+      handleSel();
+    }
+
+    function extendSelect(x, y) {
+      if (!touchAnchor) return;
+      const c = caretAt(x, y);
+      if (!c) return;
+      const r = document.createRange();
+      try {
+        const cmp = r.comparePoint(c.startContainer, c.startOffset);
+        if (cmp < 0) {
+          r.setStart(c.startContainer, c.startOffset);
+          r.setEnd(touchAnchor.node, touchAnchor.offset);
+        } else {
+          r.setStart(touchAnchor.node, touchAnchor.offset);
+          r.setEnd(c.startContainer, c.startOffset);
+        }
+      } catch (e) { return; }
+      if (r.collapsed) return;
+      selectRange(r);
+    }
+
+    root.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const el = t.target;
+      if (el.closest('.icon-btn,.btn,input,textarea,select,canvas,button')) return;
+      if (!el.closest(TEXT_SEL)) return;
+      clearTimeout(touchTimer);
+      touchSelecting = false;
+      touchTimer = setTimeout(function () { beginTouchSelect(t.clientX, t.clientY); }, 420);
+    }, { passive: true });
+
+    root.addEventListener('touchmove', function (e) {
+      if (!touchSelecting) { clearTimeout(touchTimer); return; }
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      extendSelect(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+
+    root.addEventListener('touchend', function () {
+      clearTimeout(touchTimer);
+      if (touchSelecting) { handleSel(); touchSelecting = false; }
+      touchAnchor = null;
+    });
+    root.addEventListener('touchcancel', function () {
+      clearTimeout(touchTimer);
+      touchSelecting = false;
+      touchAnchor = null;
     });
     document.addEventListener('selectionchange', U.debounce(function () {
       const sel = window.getSelection();
