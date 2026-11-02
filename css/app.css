@@ -402,6 +402,16 @@ table.tb td.n{font-family:var(--mono);text-align:right}
 .sheet-hd{margin:16px 0 8px;font-size:13px;font-weight:600;color:var(--ink-2)}
 .sheet-hd:first-of-type{margin-top:6px}
 
+/* ---------- 章节树：年份范围内无题时变灰 ---------- */
+.tree-ch.dim > summary{opacity:.4}
+.tree-ch.dim > summary .caret{opacity:.5}
+.tree-ch.dim .ch-actions{display:none}
+.tree-ch.dim .tree-sec{display:none}
+.tree-sec.dim{opacity:.4}
+.tree-sec.dim .st button{pointer-events:none}
+.kp.dim{opacity:.35;cursor:default}
+.kp.dim:hover{border-color:var(--line);background:#fff}
+
 /* ---------- 搜索筛选条 ---------- */
 .sf{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:18px;background:var(--paper-2)}
 .sf-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:5px 0}
