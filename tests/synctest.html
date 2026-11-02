@@ -50,6 +50,37 @@
     ok('local newer kept', Store.doc.progress['TESTQ'].a === 'A', Store.doc.progress['TESTQ'].a);
     ok('new key merged', !!Store.doc.progress['NEWQ']);
 
+    /* ---------- 图片同步 ---------- */
+    const px = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const imgId = 'imgtest1';
+    await Store.putImage(imgId, px);
+    Store.addNoteImage('IMGQ', imgId);
+    Store.save();
+    const okImg1 = await Store.cloud.syncNow();
+    ok('images sync #1', okImg1, Store.cloud.state + ' ' + (Store.cloud.error || ''));
+
+    // 模拟另一台设备：本地清空图片与笔记 → 再同步应恢复
+    await Store.delImage(imgId);
+    delete Store.doc.notes['IMGQ'];
+    Store.cloud._imgDirty = true; Store.cloud._imgPulled = false; Store.cloud._imgIds = null;
+    const okImg2 = await Store.cloud.syncNow();
+    const back = await Store.getImage(imgId);
+    ok('images sync #2', okImg2, Store.cloud.state + ' ' + (Store.cloud.error || ''));
+    ok('image restored', !!back && back.slice(0, 22) === 'data:image/png;base64,', back ? back.slice(0, 30) : 'null');
+    ok('note relinked', !!(Store.doc.notes['IMGQ'] && Store.doc.notes['IMGQ'].imgs.indexOf(imgId) >= 0),
+      JSON.stringify(Store.doc.notes['IMGQ'] || null).slice(0, 80));
+
+    // 删除图片 → 云端也应删除
+    Store.removeNoteImage('IMGQ', imgId);
+    const okImg3 = await Store.cloud.syncNow();
+    ok('images sync #3 (delete)', okImg3, Store.cloud.state + ' ' + (Store.cloud.error || ''));
+    const gone = await Store.getImage(imgId);
+    ok('image deleted locally', !gone);
+    Store.cloud._imgPulled = false; Store.cloud._imgIds = null;
+    await Store.cloud.syncNow();
+    const stillGone = await Store.getImage(imgId);
+    ok('image stays deleted after re-pull', !stillGone);
+
     ok('status label', /已同步/.test(Store.cloud.label()), Store.cloud.label());
     done();
   })().catch(function (e) { lines.push('[FATAL] ' + (e && e.stack || e)); done(); });
