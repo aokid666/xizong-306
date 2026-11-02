@@ -13,6 +13,15 @@
     return location.href.split('#')[0].replace(/[^/]*$/, '');
   })();
 
+  function sameOptions(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i].k !== b[i].k) return false;
+      if (a[i].v !== b[i].v) return false;
+    }
+    return true;
+  }
+
   const Bank = window.Bank = {
     meta: (window.XZ && window.XZ.meta) || null,
     loaded: {},          // subject -> [q]
@@ -94,6 +103,7 @@
 
     /* ---------- 病例题整体：把共用题干的若干小问合成一个 item ---------- */
     itemOf(q) {
+      if (q._bItem) return q._bItem;
       if (!q.clus) return { key: 'q:' + q.id, qs: [q], vignette: '', tails: [q.stem], cid: '' };
       if (q._item) return q._item;
       const qs = (this.clusters[q.clus] || [q]).slice().sort(function (a, b) { return a.n - b.n; });
@@ -138,8 +148,37 @@
         seen[it.key] = 1;
         out.push(it);
       }
-      return out;
+      if (!Store.get('bGroup')) return out;
+      // B 型题（共用备选答案）：把相邻、选项相同的题合成一题组
+      const merged = [], used = {};
+      for (let i = 0; i < out.length; i++) {
+        const it = out[i];
+        if (used[i]) continue;
+        if (it.qs.length > 1 || it.qs[0].t !== 'B') { merged.push(it); continue; }
+        const grp = [it];
+        let j = i + 1;
+        while (j < out.length && !used[j] && out[j].qs.length === 1 && out[j].qs[0].t === 'B') {
+          const a = grp[grp.length - 1].qs[0], b = out[j].qs[0];
+          if (b.y !== a.y || b.mid !== a.mid || b.v !== a.v || b.n !== a.n + 1) break;
+          if (!sameOptions(a.opts, b.opts)) break;
+          grp.push(out[j]); used[j] = 1; j++;
+        }
+        if (grp.length >= 2) {
+          merged.push({
+            key: 'b:' + grp[0].qs[0].id, qs: grp.map(function (g) { return g.qs[0]; }),
+            vignette: '', tails: [], cid: '', bGroup: true, bShared: grp[0].qs[0].opts
+          });
+          used[i] = 1;
+          // 子题缓存，避免重复渲染
+          grp.forEach(function (g) { g.qs[0]._bItem = merged[merged.length - 1]; });
+        } else {
+          merged.push(it);
+        }
+      }
+      return merged;
     },
+
+    sameOptions(a, b) { return sameOptions(a, b); },
 
     shuffle(a) {
       for (let i = a.length - 1; i > 0; i--) {
@@ -221,6 +260,83 @@
       });
       let items = self.itemsOf(qs);
       return items;
+    },
+
+    /* ---------- 模拟题（天天师兄） ---------- */
+    ensureMock() {
+      const self = this;
+      if (this.mock) return Promise.resolve(this.mock);
+      if (this._mockP) return this._mockP;
+      this._mockP = this._loadScript(BASE + 'data/mock.js').then(function () {
+        const d = window.XZ.mock || { rows: [] };
+        const list = d.rows.map(function (r, i) {
+          const q = {
+            id: 'M' + i, mock: true, subj: r[0], ci: -1, chapter: r[1] || '', sec: r[2] || '', kp: '',
+            set: r[3], n: r[4], stem: r[5],
+            opts: r[6].map(function (o) { return { k: o[0], v: o[1] }; }),
+            ans: r[7] || '', exp: '', clus: '', y: 0, t: 'M', v: '', mid: 'M'
+          };
+          q.multi = !!r[8] || q.ans.length > 1;
+          q.label = '第' + q.n + '题';
+          return q;
+        });
+        list.forEach(function (q) { self.byId.set(q.id, q); });
+        self.mock = { meta: d, list: list };
+        return self.mock;
+      }).catch(function (e) {
+        delete self._mockP;
+        throw e;
+      });
+      return this._mockP;
+    },
+
+    mockSets() {
+      const c = {};
+      (this.mock ? this.mock.list : []).forEach(function (q) { c[q.set] = (c[q.set] || 0) + 1; });
+      return Object.keys(c).map(function (k) { return { t: k, n: c[k] }; });
+    },
+
+    mockItemsBySet(setName) {
+      const qs = (this.mock ? this.mock.list : []).filter(function (q) { return q.set === setName; });
+      qs.sort(function (a, b) {
+        if (a.subj !== b.subj) return a.subj < b.subj ? -1 : 1;
+        return a.n - b.n;
+      });
+      return qs.map(function (q) { return { key: 'q:' + q.id, qs: [q], vignette: '', tails: [q.stem], cid: '' }; });
+    },
+
+    mockItemsByChapter(subj, chapter, sec) {
+      const qs = (this.mock ? this.mock.list : []).filter(function (q) {
+        return q.subj === subj && q.chapter === chapter && (!sec || q.sec === sec);
+      });
+      return qs.map(function (q) { return { key: 'q:' + q.id, qs: [q], vignette: '', tails: [q.stem], cid: '' }; });
+    },
+
+    /* ---------- 易错小结 ---------- */
+    ensureYicuo() {
+      if (window.XZ && window.XZ.yicuo) return Promise.resolve(window.XZ.yicuo);
+      if (this._ycP) return this._ycP;
+      this._ycP = this._loadScript(BASE + 'data/yicuo.js').then(function () { return window.XZ.yicuo || {}; });
+      return this._ycP;
+    },
+    yicuoMap() { return (window.XZ && window.XZ.yicuo) || {}; },
+    yicuoItems(subject) {
+      const map = this.yicuoMap();
+      const keys = map[subject] || [];
+      const qs = [];
+      keys.forEach(function (k) {
+        const parts = String(k).split('|');
+        const base = parts[0] + '-N' + parts[1];
+        const cand = Bank.byId.get(base) || Bank.byId.get(base + '-L') || Bank.byId.get(base + '-J');
+        if (cand) qs.push(cand);
+      });
+      return this.itemsOf(qs);
+    },
+
+    /* ---------- 标准答案（模拟题可自行订正） ---------- */
+    truth(q) {
+      const k = Store.doc.keys && Store.doc.keys[q.id];
+      return (k && k.v) ? k.v : (q.ans || '');
     },
 
     search(term, limit) {
