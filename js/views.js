@@ -677,11 +677,12 @@
       '<button class="btn sm" data-act="import">导入备份</button>' +
       '<button class="btn sm" data-act="reset">清空所有记录</button>' +
       '<input type="file" accept="application/json" data-file hidden>' +
-      '<span class="hint">导出包含作答记录、收藏、标记、笔记文字与手写笔迹；笔记中的图片体积较大，不含在 JSON 里。</span>' +
+      '<span class="hint">导出包含作答记录、收藏、标记、笔记文字与手写笔迹；笔记图片不含在本地 JSON 里，请用「云端同步」备份。</span>' +
       '</div></div>';
     const cf = Store.cloud.cfg();
     html += '<div class="field"><div class="k">云端同步</div><div class="v" style="display:block">' +
-      '<div class="hint" style="margin-bottom:8px">把作答记录、收藏、标记、笔记（文字）、手写同步到一个 GitHub 仓库的 JSON 文件里，换设备也能接着做。' +
+      '<div class="hint" style="margin-bottom:8px">把作答记录、收藏、标记、笔记（<b>文字 + 图片</b>）、手写同步到 GitHub 仓库里，换设备也能接着做。' +
+      '图片单独存一个 <code>*-images.json</code>，只有增删图片时才会上传。' +
       '需要一次 GitHub 令牌（fine-grained，仅 Contents 读写，<a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="text-decoration:underline">点此创建</a>）。令牌只存在本机浏览器，不会上传到任何地方。</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
       '<input class="input" data-cloud="repo" placeholder="owner/repo（私有仓库更安全）" value="' + esc(cf.repo || 'aokid666/xizong-306-data') + '" style="min-width:230px">' +
