@@ -62,7 +62,7 @@
         if (self._loading[name]) return self._loading[name];
         const code = (self.subjectMeta(name) || {}).code;
         const file = (self._manifest && self._manifest.files && self._manifest.files[name]) || ('bank-' + code + '.js');
-        self._loading[name] = self._loadScript(BASE + 'data/' + file + '?v=20261103a').then(function () {
+        self._loading[name] = self._loadScript(BASE + 'data/' + file + '?v=20261103b').then(function () {
           const rows = window.XZ.bank[name] || [];
           const arr = [];
           for (let i = 0; i < rows.length; i++) {
@@ -268,7 +268,7 @@
       const self = this;
       if (this.mock) return Promise.resolve(this.mock);
       if (this._mockP) return this._mockP;
-      this._mockP = this._loadScript(BASE + 'data/mock.js?v=20261103a').then(function () {
+      this._mockP = this._loadScript(BASE + 'data/mock.js?v=20261103b').then(function () {
         const d = window.XZ.mock || { rows: [] };
         const list = d.rows.map(function (r, i) {
           const q = {
@@ -333,7 +333,7 @@
     ensureYicuo() {
       if (window.XZ && window.XZ.yicuo) return Promise.resolve(window.XZ.yicuo);
       if (this._ycP) return this._ycP;
-      this._ycP = this._loadScript(BASE + 'data/yicuo.js?v=20261103a').then(function () { return window.XZ.yicuo || {}; });
+      this._ycP = this._loadScript(BASE + 'data/yicuo.js?v=20261103b').then(function () { return window.XZ.yicuo || {}; });
       return this._ycP;
     },
     yicuoMap() { return (window.XZ && window.XZ.yicuo) || {}; },
@@ -356,19 +356,54 @@
       return (k && k.v) ? k.v : (q.ans || '');
     },
 
-    search(term, limit) {
-      term = (term || '').trim().toLowerCase();
-      if (!term) return [];
+    search(term, opt) {
+      opt = opt || {};
+      const t = (term || '').trim().toLowerCase();
+      if (!t) return [];
+      const scope = opt.scope || 'all';
+      const fields = opt.fields && opt.fields.length ? opt.fields : ['stem', 'opts'];
+      const subs = opt.subjects && opt.subjects.length ? new Set(opt.subjects) : null;
+      const yFrom = opt.yearFrom || 0;
+      const yTo = opt.yearTo || 9999;
       const out = [];
-      this.subjectNames().forEach(function (name) {
-        (Bank.loaded[name] || []).forEach(function (q) {
-          if (out.length >= (limit || 80)) return;
-          if (q.id.toLowerCase().indexOf(term) >= 0 || q.label.toLowerCase().indexOf(term) >= 0 ||
-            q.stem.toLowerCase().indexOf(term) >= 0 || (q.kp && q.kp.toLowerCase().indexOf(term) >= 0)) out.push(q);
+
+      function hit(q, extra) {
+        for (let i = 0; i < fields.length; i++) {
+          const f = fields[i];
+          let hay = '';
+          if (f === 'stem') hay = q.stem;
+          else if (f === 'opts') hay = (q.opts || []).map(function (o) { return o.v; }).join(' ');
+          else if (f === 'exp') hay = q.exp || '';
+          else if (f === 'meta') hay = [q.label, q.id, q.kp, q.sec, q.set, q.chapter].join(' ');
+          if (hay && hay.toLowerCase().indexOf(t) >= 0) return true;
+        }
+        return false;
+      }
+
+      if (scope !== 'mock') {
+        this.subjectNames().forEach(function (name) {
+          if (subs && !subs.has(name)) return;
+          (Bank.loaded[name] || []).forEach(function (q) {
+            if (q.y < yFrom || q.y > yTo) return;
+            if (hit(q)) out.push(q);
+          });
         });
+      }
+      if (scope !== 'real' && this.mock) {
+        this.mock.list.forEach(function (q) {
+          if (subs && !subs.has(q.subj)) return;
+          if (hit(q)) out.push(q);
+        });
+      }
+      const limit = opt.limit || 300;
+      out.sort(function (a, b) {
+        const am = a.mock ? 1 : 0, bm = b.mock ? 1 : 0;
+        if (am !== bm) return am - bm;
+        return (b.y || 0) - (a.y || 0);
       });
-      return out;
-    }
+      return out.slice(0, limit);
+    },
+
   };
 })();
 
