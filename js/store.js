@@ -107,6 +107,87 @@
     const cb = U._drawerOnClose; U._drawerOnClose = null;
     if (cb) cb();
   };
+  /* ---------- 图片放大查看（可缩放/拖动/双指） ---------- */
+  U.zoom = function (src, alt) {
+    let ov = document.getElementById('zoom-ov');
+    if (!ov) {
+      ov = U.el('div', { id: 'zoom-ov', class: 'zoom-ov', hidden: true });
+      ov.innerHTML = '<div class="zoom-bar">' +
+        '<button class="btn sm" data-z="out">−</button>' +
+        '<button class="btn sm" data-z="fit">适应</button>' +
+        '<button class="btn sm" data-z="in">＋</button>' +
+        '<span class="zoom-tip">双指/滚轮缩放 · 拖动移动 · 双击放大</span>' +
+        '<span style="flex:1"></span>' +
+        '<button class="btn sm" data-z="close">✕ 关闭</button></div>' +
+        '<div class="zoom-stage"><img class="zoom-img" alt=""></div>';
+      document.body.appendChild(ov);
+      const stage = ov.querySelector('.zoom-stage');
+      const img = ov.querySelector('.zoom-img');
+      const st = { s: 1, x: 0, y: 0 };
+      const apply = function () {
+        img.style.transform = 'translate(' + st.x + 'px,' + st.y + 'px) scale(' + st.s + ')';
+      };
+      const fit = function () {
+        const r = stage.getBoundingClientRect();
+        const iw = img.naturalWidth || 1, ih = img.naturalHeight || 1;
+        st.s = Math.min(r.width / iw, r.height / ih, 1);
+        st.x = 0; st.y = 0;
+        apply();
+      };
+      ov._fit = fit;
+      ov.querySelector('[data-z="in"]').onclick = function () { st.s = Math.min(6, st.s * 1.35); apply(); };
+      ov.querySelector('[data-z="out"]').onclick = function () { st.s = Math.max(0.15, st.s / 1.35); apply(); };
+      ov.querySelector('[data-z="fit"]').onclick = fit;
+      ov.querySelector('[data-z="close"]').onclick = function () { ov.hidden = true; };
+      ov.addEventListener('click', function (e) { if (e.target === ov || e.target.classList.contains('zoom-stage')) ov.hidden = true; });
+      stage.addEventListener('wheel', function (e) {
+        e.preventDefault();
+        const k = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        st.s = Math.max(0.15, Math.min(6, st.s * k));
+        apply();
+      }, { passive: false });
+      let drag = null;
+      stage.addEventListener('pointerdown', function (e) {
+        try { stage.setPointerCapture(e.pointerId); } catch (err) { }
+        drag = { x: e.clientX, y: e.clientY, ox: st.x, oy: st.y };
+      });
+      stage.addEventListener('pointermove', function (e) {
+        if (!drag) return;
+        st.x = drag.ox + (e.clientX - drag.x);
+        st.y = drag.oy + (e.clientY - drag.y);
+        apply();
+      });
+      stage.addEventListener('pointerup', function () { drag = null; });
+      stage.addEventListener('pointercancel', function () { drag = null; });
+      stage.addEventListener('dblclick', function () {
+        if (st.s < 1.8) { st.s = Math.min(6, st.s * 2.2); } else { fit(); }
+      });
+      // 双指缩放
+      let pinch = null;
+      stage.addEventListener('touchstart', function (e) {
+        if (e.touches.length === 2) {
+          const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+          pinch = { d: d, s: st.s };
+        }
+      }, { passive: true });
+      stage.addEventListener('touchmove', function (e) {
+        if (pinch && e.touches.length === 2) {
+          e.preventDefault();
+          const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+          st.s = Math.max(0.15, Math.min(6, pinch.s * (d / (pinch.d || 1))));
+          apply();
+        }
+      }, { passive: false });
+      stage.addEventListener('touchend', function () { pinch = null; });
+    }
+    const img = ov.querySelector('.zoom-img');
+    img.src = src;
+    img.alt = alt || '';
+    ov.hidden = false;
+    const fitNow = function () { if (ov._fit) ov._fit(); };
+    if (img.complete) fitNow(); else img.onload = fitNow;
+  };
+
   U.modal = function (opt) {
     const m = document.getElementById('modal');
     if (!m) return null;
