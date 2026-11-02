@@ -244,6 +244,7 @@
     keys: {},       // qid -> {v:'AB', t:ts} 模拟题自行订正的正确答案
     imgDel: {},     // 图片删除墓碑 id -> ts（用于云端同步时同步删除）
     papers: [],     // 自定义组题记录 [{id,name,ts,items:[key],filters}]
+    links: {},      // 题目互相关联 qid -> [qid...]（双向）
     session: null   // 断点续做
   };
 
@@ -438,6 +439,33 @@
       Store.save();
     },
 
+    /* 题目互相关联（对照模式，双向） */
+    linksOf(qid) { return (Store.doc.links && Store.doc.links[qid]) || []; },
+    linkAll() {
+      const out = [];
+      const m = Store.doc.links || {};
+      Object.keys(m).forEach(function (k) { (m[k] || []).forEach(function (v) { out.push(k + '>' + v); }); });
+      return out;
+    },
+    toggleLink(a, b) {
+      if (!a || !b || a === b) return false;
+      Store.doc.links = Store.doc.links || {};
+      const A = Store.doc.links[a] || [];
+      const has = A.indexOf(b) >= 0;
+      if (has) {
+        Store.doc.links[a] = A.filter(function (x) { return x !== b; });
+        Store.doc.links[b] = (Store.doc.links[b] || []).filter(function (x) { return x !== a; });
+      } else {
+        Store.doc.links[a] = A.concat([b]);
+        const B = Store.doc.links[b] || [];
+        if (B.indexOf(a) < 0) Store.doc.links[b] = B.concat([a]);
+      }
+      if (!Store.doc.links[a].length) delete Store.doc.links[a];
+      if (Store.doc.links[b] && !Store.doc.links[b].length) delete Store.doc.links[b];
+      Store.save();
+      return !has;
+    },
+
     /* 组题记录 */
     papers() { return Store.doc.papers || []; },
     addPaper(p) {
@@ -574,6 +602,16 @@
       mine.concat(other).forEach(function (m) { if (m && m.i) byId[m.i] = m; });
       const arr = Object.keys(byId).map(function (i) { return byId[i]; });
       out.marks[k] = arr;
+    });
+    // 关联：取两边并集
+    const rl = remote.links || {};
+    out.links = out.links || {};
+    Object.keys(rl).forEach(function (k) {
+      const mine = out.links[k] || [];
+      const other = rl[k] || [];
+      const set = {};
+      mine.concat(other).forEach(function (x) { set[x] = 1; });
+      out.links[k] = Object.keys(set);
     });
     // 手写：取更新的一版
     const rh = remote.hw || {};

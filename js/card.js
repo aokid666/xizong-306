@@ -91,7 +91,10 @@
       (q0.mock ? '<button class="icon-btn" data-act="key" title="订正正确答案（模拟题）">答</button>' : '') +
       '<button class="icon-btn" data-act="note" title="笔记">✎</button>' +
       '<button class="icon-btn" data-act="hw" title="手写批注">✍</button>' +
-      '</div></div>';
+      '<button class="icon-btn" data-act="map" title="这一章的思维导图">图</button>' +
+      '<button class="icon-btn" data-act="link" title="关联相似题（对照模式）">链</button>' +
+      '</div>' +
+      '<div class="link-row" hidden></div></div>';
   }
 
   function optionsHTML(q) {
@@ -164,6 +167,7 @@
 
     card.innerHTML = cardHead(item, index) +
       '<div class="card-bd">' + body + '<canvas class="hw-layer"></canvas></div>' +
+      '<div class="map-inline" hidden></div>' +
       '<div class="case-foot-holder">' + foot + '</div>' +
       '<div class="hw-tools">' +
       '<button class="icon-btn on" data-hw="pen" title="画笔">✎</button>' +
@@ -297,9 +301,27 @@
       const hw = Store.hw(q0.id);
       hwBtn.classList.toggle('on', card.classList.contains('hw-on') || !!(hw && hw.s && hw.s.length));
     }
+    const linkBtn = card.querySelector('[data-act="link"]');
+    if (linkBtn) linkBtn.classList.toggle('on', Store.linksOf(q0.id).length > 0);
+    renderLinks(card, q0);
   }
 
-﻿  /* ---------------- 笔记面板：文字 / 图片 段落，可自由排序 ---------------- */
+﻿  /* ---------------- 关联题（对照模式） ---------------- */
+  function renderLinks(card, q0) {
+    const row = card.querySelector('.link-row');
+    if (!row) return;
+    const ids = Store.linksOf(q0.id);
+    if (!ids.length) { row.hidden = true; row.innerHTML = ''; return; }
+    row.hidden = false;
+    row.innerHTML = '<span class="hint">关联</span>' + ids.map(function (id) {
+      const q = Bank.q(id);
+      if (!q) return '';
+      const lab = q.mock ? ('模拟·' + (q.set || '') + ' 第' + q.n + '题') : q.label;
+      return '<button class="link-chip" data-linkto="' + esc(id) + '">' + esc(lab) + ' ×</button>';
+    }).join('');
+  }
+
+  /* ---------------- 笔记面板：文字 / 图片 段落，可自由排序 ---------------- */
   function openNote(card, qid, ctx) {
     const subq = card.querySelector('.subq[data-qid="' + qid + '"]') || card;
     let wrap = subq.querySelector('.note-wrap');
@@ -779,6 +801,7 @@
     applyState: applyState,
     refreshActs: refreshActs,
     openNote: openNote,
+    renderLinks: renderLinks,
     attach(root) {
       attachSelection(root);
       U.$$('.card', root).forEach(function (card) {

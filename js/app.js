@@ -24,6 +24,8 @@
     if (hash.indexOf('#/subject/') === 0) return Views.subject(decodeURIComponent(hash.slice('#/subject/'.length)));
     if (hash === '#/build') return Views.build();
     if (hash === '#/cases') return Views.cases();
+    if (hash === '#/maps') return Views.maps();
+    if (hash.indexOf('#/maps/') === 0) return Views.maps(+hash.slice(7));
     if (hash === '#/mock') return Views.mock();
     if (hash.indexOf('#/mock/sub/') === 0) return Views.mockSubject(hash.slice('#/mock/sub/'.length));
     if (hash === '#/yicuo') return Views.yicuo();

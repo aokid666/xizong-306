@@ -71,6 +71,7 @@
       entry('学习统计', '各科目进度与正确率', '#/stats') +
       entry('设置与备份', '解析显示方式、提交方式、数据导出导入', '#/settings') +
       entry('病例题专项', '按系统归类的 319 组病例题（呼吸/循环/消化/骨科…）', '#/cases') +
+      entry('思维导图', '五科导图 272 页，可手写、记笔记、按目录/关键词检索', '#/maps') +
       '</div>';
 
     html += '<div style="margin-top:40px" class="hint">提示：病例题（共用题干的多小问）在组题与随机时始终作为一个整体，不会被拆开；提交时也只给一个提交按钮。</div>';
@@ -790,6 +791,79 @@
         const items = Bank.mockItemsByChapter(s.name, ch.t, sec);
         startItems(items, '模拟题 · ' + s.name + ' · ' + ch.t + (sec ? ' · ' + sec : ''), s.name);
       });
+    });
+  };
+
+  /* ================= 思维导图 ================= */
+  Views.maps = function (startPage) {
+    shell('<div class="empty">正在载入思维导图…</div>');
+    Bank.ensureMaps().then(function () {
+      const pages = Bank.mapPages();
+      const toc = Bank.mapToc();
+      let html = crumb([{ t: '首页', href: '#/home' }, { t: '思维导图' }]);
+      html += '<div class="page-hd"><h1>思维导图</h1><div class="sub">' +
+        '天天师兄五科思维导图，共 ' + pages.length + ' 页。可以在图上手写、写笔记，左边目录直接跳转。</div></div>';
+      html += '<div class="maps">' +
+        '<aside class="maps-side">' +
+        '<input class="input" data-mapsearch placeholder="搜导图内容 / 目录…" style="width:100%">' +
+        '<div class="maps-toc" data-toc></div>' +
+        '<div class="maps-hits" data-hits hidden></div>' +
+        '</aside>' +
+        '<div class="maps-main" data-viewer></div>' +
+        '</div>';
+      shell(html);
+
+      const tocBox = app().querySelector('[data-toc]');
+      tocBox.innerHTML = toc.map(function (s0, si) {
+        return '<details class="mt-subj"' + (si === 0 ? ' open' : '') + '>' +
+          '<summary><span class="caret">▶</span><span class="name">' + esc(s0.t) + '</span></summary>' +
+          s0.chapters.map(function (ch) {
+            return '<div class="mt-ch"><a data-goto="' + (ch.p || 1) + '">' + esc(ch.t) + '</a>' +
+              (ch.secs || []).map(function (sec) {
+                return sec.p ? '<a class="mt-sec" data-goto="' + sec.p + '">' + esc(sec.t) + '</a>' : '';
+              }).join('') + '</div>';
+          }).join('') + '</details>';
+      }).join('');
+
+      const viewerHost = app().querySelector('[data-viewer]');
+      const start = startPage ? (pages.filter(function (p) { return p.n === startPage; })[0] || pages[0]) : pages[0];
+      MapUI.viewer(viewerHost, pages, { startPage: start ? start.n : 1 });
+
+      app().addEventListener('click', function (e) {
+        const g = e.target.closest('[data-goto]');
+        if (g) {
+          const n = +g.dataset.goto;
+          MapUI.viewer(viewerHost, pages, { startPage: n });
+          location.hash = '#/maps/' + n;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        const hit = e.target.closest('[data-hit]');
+        if (hit) {
+          MapUI.viewer(viewerHost, pages, { startPage: +hit.dataset.hit });
+          location.hash = '#/maps/' + hit.dataset.hit;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+
+      const inp = app().querySelector('[data-mapsearch]');
+      const hits = app().querySelector('[data-hits]');
+      const doSearch = U.debounce(function () {
+        const t = inp.value.trim();
+        if (!t) { hits.hidden = true; tocBox.hidden = false; return; }
+        const rows = Bank.mapSearch(t);
+        tocBox.hidden = true;
+        hits.hidden = false;
+        hits.innerHTML = rows.length
+          ? rows.map(function (p2) {
+            return '<div class="mh" data-hit="' + p2.n + '"><b>第 ' + p2.n + ' 页</b> · ' +
+              esc(p2.c || p2.s || '') + '<div class="hint">' + esc((p2.txt || '').slice(0, 40)) + '…</div></div>';
+          }).join('')
+          : '<div class="empty">没有匹配的导图页</div>';
+      }, 200);
+      inp.addEventListener('input', doSearch);
+    }).catch(function (e) {
+      shell('<div class="empty">导图载入失败：' + esc(e.message) + '</div>');
     });
   };
 

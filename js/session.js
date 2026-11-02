@@ -222,6 +222,15 @@
         if (kind === 'note') { Card.openNote(card, subq ? subq.dataset.qid : item.qs[0].id); return; }
         if (kind === 'hw') { Card.hwToggle(card); return; }
         if (kind === 'key') { keyDialog(item); return; }
+        if (kind === 'map') { mapDialog(item); return; }
+        if (kind === 'link') { linkDialog(item); return; }
+      }
+
+      const linkChip = t.closest('[data-linkto]');
+      if (linkChip) {
+        const cardEl = linkChip.closest('.card');
+        showQuestionModal(linkChip.dataset.linkto, cardEl ? cardEl._item : null);
+        return;
       }
 
       const tool = t.closest('[data-tool]');
@@ -399,6 +408,112 @@
             U.toast(v ? '已保存正确答案 ' + v : '已清除订正');
           }
         }
+      ]
+    });
+  }
+
+  function mapDialog(item) {
+    const q = item.qs[0];
+    const pages = Bank.mapPagesForQuestion(q);
+    const body = U.el('div');
+    body.innerHTML = '<p class="hint" style="margin-bottom:12px">' +
+      (pages.length
+        ? ('找到这一章对应的导图 <b>' + pages.length + '</b> 页（' + esc(pages[0].c || pages[0].s || '') + '）')
+        : '这一章暂时没有对应导图') + '</p>';
+    const row = U.el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' });
+    const b1 = U.el('button', { class: 'btn' }, '侧边分屏（左题右图）');
+    const b2 = U.el('button', { class: 'btn' }, '显示在题目下方');
+    b1.disabled = !pages.length;
+    b2.disabled = !pages.length;
+    b1.addEventListener('click', function () { U.closeModal(); MapUI.openForQuestion(item, 'side'); });
+    b2.addEventListener('click', function () { U.closeModal(); MapUI.openForQuestion(item, 'inline'); });
+    row.appendChild(b1); row.appendChild(b2);
+    body.appendChild(row);
+    U.modal({ title: '思维导图', body: body, buttons: [{ label: '关闭' }] });
+  }
+
+  function linkDialog(item) {
+    const q0 = item.qs[0];
+    const body = U.el('div');
+    body.innerHTML = '<input class="input" data-lk placeholder="搜题干 / 年份 / 知识点，找到相似的题" style="width:100%">' +
+      '<div class="hint" style="margin:8px 0">已关联：<span data-lk-count>' + Store.linksOf(q0.id).length + '</span> 题（双向）</div>' +
+      '<div data-lk-body class="lk-body"></div>';
+    U.modal({ title: '关联相似题（对照模式）', body: body, buttons: [{ label: '关闭' }] });
+
+    const inp = body.querySelector('[data-lk]');
+    const box = body.querySelector('[data-lk-body]');
+    const cnt = body.querySelector('[data-lk-count]');
+
+    function refreshCount() {
+      cnt.textContent = Store.linksOf(q0.id).length;
+      const card = U.$('.card[data-key="' + cssKey(item.key) + '"]', content);
+      if (card) Card.renderLinks(card, q0);
+    }
+
+    function render(rows) {
+      if (!rows.length) { box.innerHTML = '<div class="empty">没有结果</div>'; return; }
+      box.innerHTML = rows.map(function (q) {
+        const linked = Store.linksOf(q0.id).indexOf(q.id) >= 0;
+        const lab = q.mock ? ('模拟 · ' + (q.set || '') + ' 第' + q.n + '题') : q.label;
+        return '<div class="lk-row"><div class="grow">' +
+          '<div class="lk-t">' + esc(q.stem.slice(0, 70)) + (q.stem.length > 70 ? '…' : '') + '</div>' +
+          '<div class="hint">' + esc(lab) + ' · ' + esc(q.subj) + '</div></div>' +
+          '<button class="btn sm ' + (linked ? 'on' : '') + '" data-lkt="' + esc(q.id) + '">' +
+          (linked ? '已关联' : '关联') + '</button></div>';
+      }).join('');
+    }
+
+    const doSearch = U.debounce(function () {
+      const term = inp.value.trim();
+      if (!term) { box.innerHTML = '<div class="hint">输入关键词开始搜索</div>'; return; }
+      const rows = Bank.search(term, { scope: 'all', fields: ['stem', 'meta'], limit: 20 })
+        .filter(function (q) { return q.id !== q0.id; });
+      render(rows);
+    }, 220);
+
+    let timer = null;
+    inp.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(doSearch, 220); });
+    box.addEventListener('click', function (e) {
+      const b = e.target.closest('[data-lkt]');
+      if (!b) return;
+      const on = Store.toggleLink(q0.id, b.dataset.lkt);
+      b.classList.toggle('on', on);
+      b.textContent = on ? '已关联' : '关联';
+      refreshCount();
+      U.toast(on ? '已关联（双向）' : '已取消关联');
+    });
+
+    Bank.ensure(Bank.subjectNames()).then(function () { return Bank.ensureMock(); }).then(function () {
+      inp.focus();
+      box.innerHTML = '<div class="hint">输入关键词开始搜索</div>';
+    });
+  }
+
+  function showQuestionModal(qid, fromItem) {
+    const q = Bank.q(qid);
+    if (!q) return;
+    const fromCard = fromItem ? U.$('.card[data-key="' + cssKey(fromItem.key) + '"]', content) : null;
+    const truth = Bank.truth(q);
+    const body = U.el('div');
+    body.innerHTML = '<div style="font-family:var(--serif);line-height:1.8;font-size:14.5px;margin-bottom:10px">' + esc(q.stem) + '</div>' +
+      '<ul class="opts">' + q.opts.map(function (o) {
+        const ok = truth.indexOf(o.k) >= 0;
+        return '<li class="opt' + (ok ? ' correct' : '') + '"><span class="k">' + o.k + '.</span>' +
+          '<span class="t">' + esc(o.v) + '</span></li>';
+      }).join('') + '</ul>' +
+      (q.exp ? '<div class="exp" style="margin-top:10px"><div class="body">' + esc(q.exp) + '</div></div>' : '');
+    U.modal({
+      title: (q.mock ? '模拟题' : q.label) + ' · ' + q.subj, body: body,
+      buttons: [
+        {
+          label: '取消关联', onClick: function () {
+            if (!fromItem) return;
+            Store.toggleLink(fromItem.qs[0].id, qid);
+            if (fromCard) Card.renderLinks(fromCard, fromItem.qs[0]);
+            U.toast('已取消关联');
+          }
+        },
+        { label: '关闭', cls: 'primary' }
       ]
     });
   }

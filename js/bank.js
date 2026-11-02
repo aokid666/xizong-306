@@ -146,6 +146,116 @@
       return item;
     },
 
+    /* ---------- 思维导图 ---------- */
+    ensureMaps() {
+      if (window.XZ && window.XZ.maps) return Promise.resolve(window.XZ.maps);
+      if (this._mapP) return this._mapP;
+      this._mapP = this._loadScript(BASE + 'data/maps.js?v=20261103g')
+        .then(function () { return window.XZ.maps || { pages: [], toc: [] }; });
+      return this._mapP;
+    },
+    mapToc() {
+      const m = window.XZ && window.XZ.maps;
+      return m ? m.toc : [];
+    },
+    mapPage(n) {
+      const m = window.XZ && window.XZ.maps;
+      if (!m) return null;
+      return m.pages.filter(function (p) { return p.n === n; })[0] || null;
+    },
+    mapPages() {
+      const m = window.XZ && window.XZ.maps;
+      return m ? m.pages : [];
+    },
+    /* 去掉「第X章 / 第X篇 / 第X节」前缀，便于和导图目录对上 */
+    mapNormTitle(t) {
+      return String(t || '')
+        .replace(/^第[零一二三四五六七八九十百\d]+[篇章节]\s*/, '')
+        .replace(/^[\d一二三四五六七八九十]+[.、．]\s*/, '')
+        .replace(/[\s　]/g, '')
+        .replace(/[，。、；：（）()【】]/g, '');
+    },
+    /* 扁平化导图目录：[{s, t, p, kind}] */
+    mapIndex() {
+      if (this._mapIdx) return this._mapIdx;
+      const m = window.XZ && window.XZ.maps;
+      if (!m) return [];
+      const out = [];
+      m.toc.forEach(function (sub) {
+        (sub.chapters || []).forEach(function (ch) {
+          if (ch.p) out.push({ s: sub.t, t: ch.t, p: ch.p, kind: 'ch' });
+          (ch.secs || []).forEach(function (sec) {
+            if (sec.p) out.push({ s: sub.t, t: sec.t, p: sec.p, kind: 'sec' });
+          });
+        });
+      });
+      this._mapIdx = out;
+      return out;
+    },
+    mapSubjectKey(subj) {
+      const map = { '生理学': '生理', '生物化学': '生化', '病理学': '病理', '内科学': '内科', '外科学': '外科' };
+      return map[subj] || '';
+    },
+    /* 某道题对应的导图页 */
+    mapPagesForQuestion(q) {
+      const m = window.XZ && window.XZ.maps;
+      if (!m || !q) return [];
+      const sk = this.mapSubjectKey(q.subj);
+      if (!sk) return [];
+      const idx = this.mapIndex().filter(function (e) { return e.s.indexOf(sk) >= 0; });
+      if (!idx.length) return [];
+      const chap = this.chapterMeta(q.subj, q.ci);
+      const cands = [];
+      if (chap) cands.push(this.mapNormTitle(chap.t));
+      if (q.sec) cands.push(this.mapNormTitle(q.sec));
+      if (q.kp) cands.push(this.mapNormTitle(q.kp));
+      const clean = cands.filter(function (c) { return c && c.length >= 2; });
+
+      let hit = null;
+      // 先精确，再包含
+      for (let flow = 0; flow < 2 && !hit; flow++) {
+        for (let i = 0; i < clean.length && !hit; i++) {
+          const c = clean[i];
+          for (let j = 0; j < idx.length; j++) {
+            const t = this.mapNormTitle(idx[j].t);
+            if (!t) continue;
+            if (flow === 0 ? t === c : (t.indexOf(c) >= 0 || c.indexOf(t) >= 0)) {
+              hit = idx[j];
+              break;
+            }
+          }
+        }
+      }
+      if (!hit) return [];
+      const pos = idx.indexOf(hit);
+      let end = null;
+      for (let k = pos + 1; k < idx.length; k++) {
+        if (idx[k].p > hit.p) { end = idx[k].p - 1; break; }
+      }
+      if (end == null) end = hit.p + 1;
+      end = Math.min(end, hit.p + 3);
+      const pages = [];
+      for (let n = hit.p; n <= end; n++) {
+        const pg = m.pages[n - 1];
+        if (pg) pages.push(pg);
+      }
+      return pages;
+    },
+    mapSearch(term) {
+      const m = window.XZ && window.XZ.maps;
+      const t = (term || '').trim().toLowerCase();
+      if (!m || !t) return [];
+      const hitPages = {};
+      m.pages.forEach(function (p) {
+        const hay = ((p.txt || '') + ' ' + (p.c || '') + ' ' + (p.s || '')).toLowerCase();
+        if (hay.indexOf(t) >= 0) hitPages[p.n] = 1;
+      });
+      this.mapIndex().forEach(function (e) {
+        if (String(e.t || '').toLowerCase().indexOf(t) >= 0) hitPages[e.p] = 1;
+      });
+      return m.pages.filter(function (p) { return hitPages[p.n]; }).slice(0, 80);
+    },
+
     /* ---------- 病例题专项（天天师兄病例分析 PDF） ---------- */
     ensureCases() {
       if (window.XZ && window.XZ.cases) return Promise.resolve(window.XZ.cases);
