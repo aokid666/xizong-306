@@ -522,6 +522,31 @@
       return d;
     },
 
+    anchorAt(card, cx, cy) {
+      const cv = this.canvas(card);
+      const cvr = cv.getBoundingClientRect();
+      const blocks = Array.prototype.slice.call(card.querySelectorAll('.subq'));
+      let best = -1, bt = 0;
+      for (let i = 0; i < blocks.length; i++) {
+        const r = blocks[i].getBoundingClientRect();
+        if (cy >= r.top && cy <= r.bottom) { best = i; bt = r.top - cvr.top; break; }
+        if (r.top <= cy) { best = i; bt = r.top - cvr.top; }
+      }
+      if (best >= 0) return { a: best, bt: bt };
+      const bd = card.querySelector('.card-bd');
+      return { a: -1, bt: bd ? (bd.getBoundingClientRect().top - cvr.top) : 0 };
+    },
+
+    blockShift(card, st, scale) {
+      if (st.a == null || st.a < 0 || st.ay == null) return 0;
+      const blocks = card.querySelectorAll('.subq');
+      const blk = blocks[st.a];
+      if (!blk) return 0;
+      const cv = this.canvas(card);
+      const btNow = (blk.getBoundingClientRect().top - cv.getBoundingClientRect().top) / (scale || 1);
+      return btNow - (st.p[1] - st.ay);
+    },
+
     redraw(card) {
       const cv = this.canvas(card);
       const ctx = cv.getContext('2d');
@@ -531,17 +556,19 @@
       const data = this.data(card);
       if (!data || !data.s || !data.s.length) return;
       const scale = cv._lw / (data.w || cv._lw);
+      const self = this;
       data.s.forEach(function (st) {
         const pts = st.p || st;
         const col = st.c || data.c || '#191919';
         const lw = (st.w || data.lw || 3) * scale;
+        const sh = self.blockShift(card, st, scale);
         ctx.beginPath();
         ctx.strokeStyle = col;
         ctx.lineWidth = lw;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         for (let i = 0; i < pts.length; i += 2) {
-          const x = pts[i] * scale, y = pts[i + 1] * scale;
+          const x = pts[i] * scale, y = (pts[i + 1] + sh) * scale;
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
@@ -571,7 +598,11 @@
         }
         drawing = true;
         card._hwDrawing = true;
-        cur = { p: [p[0], p[1]], c: cv._color || '#191919', w: cv._width || 3 };
+        const anc = HW.anchorAt(card, e.clientX, e.clientY);
+        cur = {
+          p: [p[0], p[1]], c: cv._color || '#191919', w: cv._width || 3,
+          a: anc.a, ay: p[1] - anc.bt
+        };
         const d = HW.data(card);
         d.s.push(cur);
         HW.redraw(card);
@@ -603,8 +634,9 @@
       const cv = this.canvas(card);
       // 画布可能因为笔记展开、解析展开而重新缩放，橡皮坐标要换算回笔迹原始坐标
       const scale = (d.w && cv._lw) ? (cv._lw / d.w) : 1;
-      const px = x / (scale || 1), py = y / (scale || 1);
-      const R = 12;                       // 橡皮半径（像素）
+      const sc = scale || 1;
+      const px = x / sc, py = y / sc;
+      const R = 12 / sc;
       const R2 = R * R;
       function dist2Seg(ax, ay, bx, by, x, y) {
         const vx = bx - ax, vy = by - ay;
@@ -616,14 +648,17 @@
         return dx * dx + dy * dy;
       }
       const before = d.s.length;
+      const self = this;
       d.s = d.s.filter(function (st) {
         const pts = st.p || st;
+        const sh = self.blockShift(card, st, sc);
+        const qy = py - sh;
         if (pts.length <= 2) {
-          const dx = pts[0] - px, dy = pts[1] - py;
+          const dx = pts[0] - px, dy = pts[1] - qy;
           return dx * dx + dy * dy > R2;
         }
         for (let i = 0; i + 3 < pts.length; i += 2) {
-          if (dist2Seg(pts[i], pts[i + 1], pts[i + 2], pts[i + 3], px, py) <= R2) return false;
+          if (dist2Seg(pts[i], pts[i + 1], pts[i + 2], pts[i + 3], px, qy) <= R2) return false;
         }
         return true;
       });
@@ -678,6 +713,7 @@
     buttons.forEach(function (b) {
       const btn = U.el('button', { text: b.label });
       btn.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
+      btn.addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); }, { passive: false });
       btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); b.fn(); });
       f.appendChild(btn);
     });
@@ -714,7 +750,7 @@
     if (root._selBound) return;
     root._selBound = true;
 
-    root.addEventListener('mouseup', function (e) {
+    const handleSel = function () {
       setTimeout(function () {
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed || !sel.rangeCount) return;
@@ -759,7 +795,20 @@
           }
         ]);
       }, 10);
+    };
+
+    root.addEventListener('mouseup', handleSel);
+    root.addEventListener('touchend', function () {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) handleSel();
     });
+    document.addEventListener('selectionchange', U.debounce(function () {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+      let node = sel.getRangeAt(0).commonAncestorContainer;
+      if (node.nodeType === 3) node = node.parentElement;
+      if (node && node.closest && node.closest('.card') && root.contains(node)) handleSel();
+    }, 350));
 
     root.addEventListener('mousedown', function (e) {
       if (floatEl && !e.target.closest('.float-tools')) hideFloat();
@@ -796,6 +845,7 @@
   }
 
   /* ---------------- 对外接口 ---------------- */
+  window.__HW = HW;
   window.Card = {
     build: build,
     applyState: applyState,
