@@ -401,6 +401,18 @@ table.tb td.n{font-family:var(--mono);text-align:right}
 .sheet-hd{margin:16px 0 8px;font-size:13px;font-weight:600;color:var(--ink-2)}
 .sheet-hd:first-of-type{margin-top:6px}
 
+/* ---------- 搜索筛选条 ---------- */
+.sf{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:18px;background:var(--paper-2)}
+.sf-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:5px 0}
+.sf-row + .sf-row{border-top:1px dashed var(--line-2)}
+.sf-k{width:52px;flex:none;font-size:12.5px;color:var(--muted)}
+.sf-chip{
+  font-size:12.5px;color:var(--ink-2);border:1px solid var(--line);border-radius:14px;
+  padding:3px 11px;background:#fff;margin:2px 4px 2px 0;
+}
+.sf-chip:hover{border-color:#c8c4be}
+.sf-chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
 /* ---------- 多选 / B 型题 / 共用备选 ---------- */
 .tag.multi{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:700;letter-spacing:1px}
 .shared-opts{border:1px solid var(--line);background:var(--paper-2);border-radius:8px;padding:12px 14px;margin-bottom:16px}
