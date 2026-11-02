@@ -1,0 +1,111 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>preview</title>
+<link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#/home">西综真题<span class="brand-sub">306 · 1988—2026</span></a>
+    <nav class="nav">
+      <a href="#/years">按年份</a><a href="#/subjects">按科目</a><a href="#/build">组题</a><a href="#/lists">收藏/错题</a><a href="#/stats">统计</a>
+    </nav>
+    <div class="topbar-r"><input class="search" placeholder="搜题干 / 年份代号"><button class="icon-btn">⚙</button></div>
+  </div>
+</header>
+<main id="app" class="wrap"></main>
+<div id="toast" class="toast" hidden></div>
+<div id="drawer" class="drawer" hidden>
+  <div class="drawer-mask" data-close></div>
+  <aside class="drawer-panel"><header class="drawer-hd"><h2 id="drawer-title"></h2><button class="icon-btn" data-close>✕</button></header><div id="drawer-body" class="drawer-bd"></div></aside>
+</div>
+<div id="modal" class="modal" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-panel"><header class="modal-hd"><h2 id="modal-title"></h2><button class="icon-btn" data-close>✕</button></header><div id="modal-body" class="modal-bd"></div><footer id="modal-foot" class="modal-ft"></footer></div>
+</div>
+<footer class="foot"><div class="wrap"><p>题目与解析整理自 <b>医考帮</b> 导出资料，共 <b>6,749</b> 题。</p></div></footer>
+
+<script>
+window.onerror=function(m,s,l,c,e){var d=document.createElement('div');d.className='errbox';d.textContent='ERR: '+m+' @'+(s||'').split('/').pop()+':'+l;document.body.appendChild(d);};
+window.addEventListener('unhandledrejection',function(ev){var d=document.createElement('div');d.className='errbox';d.textContent='REJ: '+(ev.reason&&ev.reason.stack||ev.reason);document.body.appendChild(d);});
+</script><script src="../data/meta.js"></script>
+<script src="../js/store.js"></script>
+<script src="../js/bank.js"></script>
+<script src="../js/card.js"></script>
+<script src="../js/session.js"></script>
+<script src="../js/views.js"></script>
+<script src="../js/app.js"></script>
+<script>
+(function () {
+  const q = new URLSearchParams(location.search);
+  const v = q.get('v') || 'home';
+  const wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  async function boot() {
+    for (let i = 0; i < 200 && !document.querySelector('.hero'); i++) await wait(50);
+    await wait(120);          // 等 app.js 启动完成（首页已渲染）
+    if (v === 'home') return;
+    if (v === 'tree') { location.hash = '#/subject/' + encodeURIComponent(q.get('s') || '内科学'); return; }
+    if (v === 'build') { location.hash = '#/build'; return; }
+    if (v === 'years') { location.hash = '#/years'; return; }
+    if (v === 'lists') { location.hash = '#/lists'; return; }
+
+    await Bank.ensureAll();
+    const items = Bank.itemsByYear(2020, {});
+    const cluster = items.filter(function (i) { return i.qs.length === 3; })[0];
+    const singles = items.filter(function (i) { return i.qs.length === 1; });
+    const chosen = [singles[0], cluster, singles[1]];
+    if (v === 'paged') Store.set('mode', 'paged');
+    Session.start({ title: '2020 年真题 · 预览', subtitle: '预览', items: chosen });
+    await wait(120);
+
+    // 第一题：选错一个，提交 → 展示红绿
+    const c0 = document.querySelector('.card');
+    const opts = c0.querySelectorAll('.opt');
+    const q0 = c0._item.qs[0];
+    const correct = q0.ans.split('');
+    const wrongKey = ['A', 'B', 'C', 'D', 'E'].filter(function (k) { return correct.indexOf(k) < 0; })[0] || 'A';
+    opts.forEach(function (o) { if (o.dataset.k === wrongKey) o.click(); });
+    await wait(30);
+    const sb = c0.querySelector('[data-act="submit"]');
+    if (sb) sb.click();
+
+    // 第二题（病例）：选对，加高亮 + 手写
+    const c1 = document.querySelectorAll('.card')[1];
+    if (c1) {
+      const q1 = c1._item.qs[0];
+      c1.querySelectorAll('.subq')[0].querySelectorAll('.opt').forEach(function (o) {
+        if (q1.ans.indexOf(o.dataset.k) >= 0) o.click();
+      });
+      Store.addMark(q1.id, { f: 'stem', s: 2, e: 12, tx: q1.stem.slice(2, 12), k: 'hl', n: '注意这里' });
+      Store.setHw(q1.id, { w: c1.querySelector('.card-bd').clientWidth, h: c1.querySelector('.card-bd').clientHeight,
+        s: [{ p: [40, 30, 120, 46, 200, 30, 260, 60], c: '#bf2b2b', w: 2.5 }] });
+      Card.hwToggle(c1);
+      Card.hwRedraw(c1);
+    }
+    await wait(200);
+    document.title = 'preview-' + v;
+    if (q.get('dbg')) {
+      const w = document.documentElement.scrollWidth;
+      const wide = Array.prototype.slice.call(document.querySelectorAll('body *')).filter(function (el) {
+        const r = el.getBoundingClientRect();
+        return r.right > w + 1 || r.width > w + 1;
+      }).slice(0, 10).map(function (el) {
+        const r = el.getBoundingClientRect();
+        return el.tagName + '.' + (el.className || '') + ' w=' + Math.round(r.width) + ' r=' + Math.round(r.right);
+      });
+      const d = document.createElement('div');
+      d.className = 'errbox';
+      d.textContent = 'scrollWidth=' + w + ' innerWidth=' + window.innerWidth + ' || ' + wide.join(' ; ');
+      document.body.appendChild(d);
+    }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
+
