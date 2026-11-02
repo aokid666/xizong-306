@@ -62,7 +62,7 @@
         if (self._loading[name]) return self._loading[name];
         const code = (self.subjectMeta(name) || {}).code;
         const file = (self._manifest && self._manifest.files && self._manifest.files[name]) || ('bank-' + code + '.js');
-        self._loading[name] = self._loadScript(BASE + 'data/' + file + '?v=20261103d').then(function () {
+        self._loading[name] = self._loadScript(BASE + 'data/' + file + '?v=20261103e').then(function () {
           const rows = window.XZ.bank[name] || [];
           const arr = [];
           for (let i = 0; i < rows.length; i++) {
@@ -108,7 +108,12 @@
       if (!q.clus) return { key: 'q:' + q.id, qs: [q], vignette: '', tails: [q.stem], cid: '' };
       if (q._item) return q._item;
       const qs = (this.clusters[q.clus] || [q]).slice().sort(function (a, b) { return a.n - b.n; });
-      const item = { key: 'c:' + q.clus, qs: qs, vignette: '', tails: [], cid: q.clus };
+      return this.caseItem(qs, 'c:' + q.clus, q.clus);
+    },
+
+    /* 用一组题（共用题干）构造 item */
+    caseItem(qs, key, cid) {
+      const item = { key: key, qs: qs, vignette: '', tails: [], cid: cid || '' };
       // 最长公共前缀 -> 题干正文
       let pre = qs[0].stem;
       for (let i = 1; i < qs.length; i++) {
@@ -139,6 +144,39 @@
       }
       qs.forEach(function (x) { x._item = item; });
       return item;
+    },
+
+    /* ---------- 病例题专项（天天师兄病例分析 PDF） ---------- */
+    ensureCases() {
+      if (window.XZ && window.XZ.cases) return Promise.resolve(window.XZ.cases);
+      if (this._caseP) return this._caseP;
+      this._caseP = this._loadScript(BASE + 'data/cases.js?v=20261103e')
+        .then(function () { return window.XZ.cases || { topics: [] }; });
+      return this._caseP;
+    },
+    caseTopics() {
+      const c = window.XZ && window.XZ.cases;
+      return (c ? c.topics : []).map(function (t) { return { t: t.t, n: t.groups.length }; });
+    },
+    caseItems(topic) {
+      const c = window.XZ && window.XZ.cases;
+      if (!c) return [];
+      const self = this, out = [];
+      c.topics.forEach(function (t) {
+        if (topic && t.t !== topic) return;
+        t.groups.forEach(function (g) {
+          const qs = g.q.map(function (id) { return self.byId.get(id); }).filter(Boolean);
+          if (!qs.length) return;
+          if (qs.length === 1) {
+            out.push(self.itemOf(qs[0]));
+          } else if (qs[0].clus && (self.clusters[qs[0].clus] || []).length === qs.length) {
+            out.push(self.itemOf(qs[0]));
+          } else {
+            out.push(self.caseItem(qs, 'cg:' + qs[0].id));
+          }
+        });
+      });
+      return out;
     },
 
     itemsOf(qs) {
@@ -268,7 +306,7 @@
       const self = this;
       if (this.mock) return Promise.resolve(this.mock);
       if (this._mockP) return this._mockP;
-      this._mockP = this._loadScript(BASE + 'data/mock.js?v=20261103d').then(function () {
+      this._mockP = this._loadScript(BASE + 'data/mock.js?v=20261103e').then(function () {
         const d = window.XZ.mock || { rows: [] };
         const list = d.rows.map(function (r, i) {
           const q = {
@@ -333,7 +371,7 @@
     ensureYicuo() {
       if (window.XZ && window.XZ.yicuo) return Promise.resolve(window.XZ.yicuo);
       if (this._ycP) return this._ycP;
-      this._ycP = this._loadScript(BASE + 'data/yicuo.js?v=20261103d').then(function () { return window.XZ.yicuo || {}; });
+      this._ycP = this._loadScript(BASE + 'data/yicuo.js?v=20261103e').then(function () { return window.XZ.yicuo || {}; });
       return this._ycP;
     },
     yicuoMap() { return (window.XZ && window.XZ.yicuo) || {}; },
