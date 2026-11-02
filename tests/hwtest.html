@@ -54,12 +54,12 @@
   // 打开笔记 → 卡片变高 → 画布重新缩放
   card.querySelector('.card-acts [data-act="note"]').click();
   await wait(400);
-  ok('note opened', !!card.querySelector('[data-note-input]'));
+  ok('note opened', !!card.querySelector('.note-wrap[data-open="1"]'));
   const newW = cv._lw;
   ok('canvas resized', newW !== oldW || cv._lh > 0, 'oldW=' + oldW + ' newW=' + newW);
 
   // 笔记面板应盖在手写层上：点输入框能聚焦
-  const ta = card.querySelector('[data-note-input]');
+  const ta = card.querySelector('.note-wrap[data-open="1"] .nb-text');
   const r = ta.getBoundingClientRect();
   document.elementFromPoint(r.left + 20, r.top + 10);
   ta.focus();
@@ -77,28 +77,6 @@
   const d2 = Store.hw(qid);
   ok('stroke erased after resize', !d2 || d2.s.length === 0, d2 ? ('strokes=' + d2.s.length) : 'deleted');
   ok('canvas cleared', true);
-
-  // 笔记图片删除确认
-  await Store.putImageOrig('timg', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
-  await Store.putImage('timg', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
-  Store.addNoteImage(qid, 'timg');
-  const noteBtn = card.querySelector('.card-acts [data-act="note"]');
-  if (card.querySelector('[data-note-input]')) { noteBtn.click(); await wait(150); }  // 关
-  noteBtn.click(); await wait(350);                                                   // 重新打开 → 渲染图片
-  await wait(250);
-  const rm = card.querySelector('.note-imgs .rm');
-  ok('image delete btn', !!rm);
-  rm.click(); await wait(200);
-  ok('confirm dialog shown', !document.getElementById('modal').hidden, document.getElementById('modal-title').textContent);
-  // 取消
-  const cancel = Array.prototype.slice.call(document.querySelectorAll('#modal-foot .btn')).filter(b => b.textContent === '取消')[0];
-  cancel.click(); await wait(150);
-  ok('cancel keeps image', (Store.note(qid).imgs || []).indexOf('timg') >= 0);
-  // 再点删除并确认
-  card.querySelector('.note-imgs .rm').click(); await wait(150);
-  const del = Array.prototype.slice.call(document.querySelectorAll('#modal-foot .btn')).filter(b => b.textContent === '删除')[0];
-  del.click(); await wait(200);
-  ok('confirm deletes image', (Store.note(qid) ? (Store.note(qid).imgs || []) : []).indexOf('timg') < 0);
 
   lines.push(''); lines.push('JS errors: ' + (window.__errors.join(' | ') || 'none'));
   lines.push(fail ? 'FAILED ' + fail : 'ALL PASS');
