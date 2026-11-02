@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>selftest</title>
+<style>body{font:14px/1.6 monospace;padding:20px}pre{white-space:pre-wrap}</style>
+</head>
+<body>
+<pre id="out">running…</pre>
+<hr>
+<div id="app" class="wrap"></div>
+<div id="toast" class="toast" hidden></div>
+<div id="drawer" class="drawer" hidden>
+  <div class="drawer-mask" data-close></div>
+  <aside class="drawer-panel"><header class="drawer-hd"><h2 id="drawer-title"></h2><button class="icon-btn" data-close>X</button></header><div id="drawer-body" class="drawer-bd"></div></aside>
+</div>
+<div id="modal" class="modal" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-panel"><header class="modal-hd"><h2 id="modal-title"></h2><button class="icon-btn" data-close>X</button></header><div id="modal-body" class="modal-bd"></div><footer id="modal-foot" class="modal-ft"></footer></div>
+</div>
+
+<script>
+window.__errors = [];
+window.onerror = function (m, s, l, c, e) { window.__errors.push(m + ' @' + (s || '').split('/').pop() + ':' + l); };
+</script>
+<script src="../data/meta.js"></script>
+<script src="../js/store.js"></script>
+<script src="../js/bank.js"></script>
+<script src="../js/card.js"></script>
+<script src="../js/session.js"></script>
+<script src="../js/views.js"></script>
+<script src="../js/app.js"></script>
+<script>
+(function () {
+  const lines = [];
+  let fail = 0;
+  function ok(name, cond, extra) {
+    lines.push((cond ? '[PASS] ' : '[FAIL] ') + name + (extra != null ? '  — ' + extra : ''));
+    if (!cond) fail++;
+  }
+  function done() {
+    lines.push('');
+    lines.push('JS errors: ' + (window.__errors.length ? window.__errors.join(' | ') : 'none'));
+    lines.push(fail ? ('FAILED ' + fail) : 'ALL PASS');
+    document.getElementById('out').textContent = lines.join('\n');
+    document.title = fail ? 'FAIL ' + fail : 'OK';
+  }
+  const wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  function cardCtx() {
+    return {
+      sel: function () { return ''; },
+      res: function () { return null; },
+      showSubmit: function () { return true; }
+    };
+  }
+
+  (async function () {
+    await Store.init();
+    await Bank.init();
+    ok('meta loaded', !!Bank.meta, 'total=' + (Bank.meta && Bank.meta.total));
+    ok('6 subjects', Bank.subjectNames().length === 6, Bank.subjectNames().join('/'));
+    await Bank.ensureAll();
+    ok('all rows', Bank.loadedCount() === Bank.meta.total, Bank.loadedCount() + '');
+    ok('no duplicate ids', Bank.byId.size === Bank.meta.total);
+    await wait(400);  // 等 app.js 的 boot + 首页渲染完成
+
+    const it2020 = Bank.itemsByYear(2020, {});
+    ok('2020 items', it2020.length > 100, it2020.length + ' items / ' + it2020.reduce(function (a, i) { return a + i.qs.length; }, 0) + ' q');
+
+    let bad = 0, withVig = 0;
+    Object.keys(Bank.clusters).forEach(function (cid) {
+      const qs = Bank.clusters[cid];
+      const it = Bank.itemOf(qs[0]);
+      if (it.qs.length !== qs.length) bad++;
+      if (it.vignette) withVig++;
+      if (it.qs.length > 1) {
+        const keys = {};
+        it.qs.forEach(function (q) { keys[it.key] = 1; });
+        if (Object.keys(keys).length !== 1) bad++;
+      }
+    });
+    ok('cluster grouping', bad === 0, withVig + ' vignettes / ' + Object.keys(Bank.clusters).length + ' clusters');
+
+    // ---- marks render
+    const item = it2020.filter(function (x) { return x.qs.length === 3; })[0] || it2020[0];
+    const qid = item.qs[0].id;
+    const card1 = Card.build(item, 0, cardCtx());
+    document.getElementById('app').appendChild(card1);
+    const stemText = card1.querySelector('.stem').textContent.slice(0, 6);
+    Store.addMark(qid, { f: 'stem', s: 0, e: 6, tx: stemText, k: 'hl', n: '考虑 xx' });
+    const card2 = Card.build(item, 0, cardCtx());
+    document.getElementById('app').appendChild(card2);
+    ok('mark rendered on rebuild', card2.querySelectorAll('mark.hl').length === 1, card2.querySelectorAll('mark.hl').length + '');
+    ok('mark has note sup', card2.querySelectorAll('sup.mk').length === 1);
+    Store.setMarks(qid, []);
+
+    // ---- 多选
+    const xq = Bank.loaded['生理学'].filter(function (q) { return q.t === 'X' && q.ans.length >= 3; })[0];
+    ok('X question found', !!xq, xq && (xq.label + ' ans=' + xq.ans));
+    const c3 = Card.build(Bank.itemOf(xq), 0, cardCtx());
+    document.getElementById('app').appendChild(c3);
+    ok('X card opts', c3.querySelectorAll('.opt').length >= 4);
+
+    // ---- session (scroll)
+    U.resetApp('wrap session');
+    Session.start({ title: 'T', subtitle: 's', items: it2020.slice(0, 3) });
+    await wait(80);
+    ok('session mounted', document.querySelectorAll('.card').length === 3, document.querySelectorAll('.card').length + '');
+    ok('session bar', !!document.querySelector('.session-bar [data-prog]'), document.querySelector('[data-prog]').textContent);
+
+    const firstCard = document.querySelector('.card');
+    const firstOpt = firstCard.querySelector('.opt');
+    firstOpt.click();
+    await wait(30);
+    ok('option selected', firstCard.querySelector('.opt').classList.contains('sel'));
+    const submitBtn = firstCard.querySelector('[data-act="submit"]');
+    ok('submit enabled', submitBtn && !submitBtn.disabled);
+    submitBtn.click();
+    await wait(30);
+    ok('verdict after submit', !firstCard.querySelector('.verdict').hidden);
+    const prog = Store.prog(firstCard._item.qs[0].id);
+    ok('progress recorded', !!prog, prog && ('ok=' + prog.ok));
+
+    // paged mode
+    document.querySelector('[data-tool="mode"]').click();
+    await wait(80);
+    ok('paged mode', document.querySelector('.pager') && !document.querySelector('.pager').hidden, document.querySelectorAll('.card').length + ' card(s)');
+    const next = document.querySelector('[data-page="next"]');
+    if (next) next.click();
+    await wait(60);
+    ok('paged next works', document.querySelectorAll('.card').length === 1);
+
+    // answer sheet
+    document.querySelector('[data-tool="sheet"]').click();
+    await wait(40);
+    ok('answer sheet', document.querySelectorAll('.sheet button').length === 3, document.querySelectorAll('.sheet button').length + '');
+    U.closeDrawer();
+    await wait(30);
+
+    Session.teardown();
+    await wait(40);
+
+    // ---- views
+    location.hash = '#/years'; await wait(100); location.hash = '#/home'; await wait(150);
+    ok('home', document.querySelectorAll('.entry').length === 6);
+    location.hash = '#/years'; await wait(150);
+    ok('years view', document.querySelectorAll('[data-year]').length >= 30, document.querySelectorAll('[data-year]').length + '');
+    location.hash = '#/subjects'; await wait(150);
+    ok('subjects view', document.querySelectorAll('[data-subject]').length === 6);
+    location.hash = '#/subject/' + encodeURIComponent('生理学'); await wait(150);
+    ok('subject tree', document.querySelectorAll('details.tree-ch').length > 5, document.querySelectorAll('details.tree-ch').length + '');
+    location.hash = '#/build'; await wait(150);
+    ok('build view', !!document.querySelector('[data-chap-box]') && document.querySelectorAll('[data-chap]').length > 100, document.querySelectorAll('[data-chap]').length + ' chapters');
+    location.hash = '#/stats'; await wait(500);
+    ok('stats view', document.querySelectorAll('.stat').length >= 6, document.querySelectorAll('.stat').length + '');
+    location.hash = '#/settings'; await wait(150);
+    ok('settings view', document.querySelectorAll('[data-setseg]').length === 3);
+    location.hash = '#/lists'; await wait(500);
+    ok('lists view', !!document.getElementById('list-body'));
+
+    const q = Bank.query({ subjects: ['病理学', '内科学'], yearFrom: 2010, yearTo: 2024, types: ['A', 'X'] });
+    ok('query combo', q.length > 50, q.length + '');
+    const grp = q.filter(function (i) { return i.qs.length > 1; }).length;
+    lines.push('   clusters inside query: ' + grp);
+    lines.push('   storage backend: ' + Store.backend);
+    lines.push('   病理学 items: ' + Bank.itemsOf(Bank.loaded['病理学']).length);
+    done();
+  })().catch(function (e) {
+    lines.push('[FATAL] ' + (e && e.stack || e));
+    done();
+  });
+})();
+</script>
+</body>
+</html>
