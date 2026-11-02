@@ -150,7 +150,7 @@
     ensureMaps() {
       if (window.XZ && window.XZ.maps) return Promise.resolve(window.XZ.maps);
       if (this._mapP) return this._mapP;
-      this._mapP = this._loadScript(BASE + 'data/maps.js?v=20261103i')
+      this._mapP = this._loadScript(BASE + 'data/maps.js?v=20261103j')
         .then(function () { return window.XZ.maps || { pages: [], toc: [] }; });
       return this._mapP;
     },
@@ -173,6 +173,7 @@
         .replace(/^第[零一二三四五六七八九十百\d]+[篇章节]\s*/, '')
         .replace(/^[\d一二三四五六七八九十]+[.、．]\s*/, '')
         .replace(/[\s　]/g, '')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
         .replace(/[，。、；：（）()【】]/g, '');
     },
     /* 扁平化导图目录：[{s, t, p, kind}] */
@@ -196,6 +197,80 @@
       const map = { '生理学': '生理', '生物化学': '生化', '病理学': '病理', '内科学': '内科', '外科学': '外科' };
       return map[subj] || '';
     },
+    mapScore(a, b) {
+      if (!a || !b) return 0;
+      if (a === b) return 100;
+      if (a.indexOf(b) >= 0 || b.indexOf(a) >= 0) {
+        const r = Math.min(a.length, b.length) / Math.max(a.length, b.length);
+        return 52 + 40 * r;
+      }
+      const bigrams = function (s0) {
+        const m = {};
+        for (let i = 0; i + 1 < s0.length; i++) {
+          const k = s0.slice(i, i + 2);
+          m[k] = (m[k] || 0) + 1;
+        }
+        return m;
+      };
+      const A = bigrams(a), B = bigrams(b);
+      let inter = 0, total = 0;
+      Object.keys(A).forEach(function (k) { total += A[k]; if (B[k]) inter += Math.min(A[k], B[k]); });
+      Object.keys(B).forEach(function (k) { if (!A[k]) total += B[k]; });
+      if (!total) return 0;
+      return 55 * inter / total;
+    },
+
+    /* 导图里的常见简称/别名 */
+    mapAlias(t) {
+      const A = {
+        '心力衰竭': ['心衰', '收缩性心衰', '舒张性心衰'],
+        '慢性心力衰竭': ['心衰'],
+        '慢性阻塞性肺疾病': ['COPD', '慢阻肺'],
+        '呼吸衰竭': ['呼衰'],
+        '肾功能衰竭': ['肾衰'],
+        '急性上呼吸道感染': ['上感'],
+        '甲状腺功能亢进': ['甲亢'],
+        '甲状腺功能减退': ['甲减'],
+        '糖尿病': ['DM'],
+        '肝硬化': ['肝硬化'],
+        '消化性溃疡': ['溃疡'],
+        '上消化道出血': ['消化道出血'],
+        '肾病综合征': ['肾病'],
+        '冠状动脉粥样硬化性心脏病': ['冠心病'],
+        '急性心肌梗死': ['心梗', '冠心病'],
+        '贫血': ['贫血'],
+        '白血病': ['白血病'],
+        '淋巴瘤': ['淋巴瘤'],
+        '类风湿关节炎': ['类风湿'],
+        '系统性红斑狼疮': ['SLE', '狼疮'],
+        '急性胰腺炎': ['胰腺炎'],
+        '胆石症': ['胆道'],
+        '肠梗阻': ['肠梗阻'],
+        '腹外疝': ['疝'],
+        '骨折': ['骨折'],
+        '水、电解质代谢紊乱和酸碱平衡失调': ['水和电解质', '酸碱平衡'],
+        '围手术期处理': ['围手术期'],
+        '尿的生成和排出': ['泌尿', '肾'],
+        '能量代谢与体温': ['能量代谢', '体温'],
+        '脂质代谢': ['脂代谢'],
+        '糖代谢': ['糖代谢'],
+        'RNA的生物合成': ['RNA'],
+        '细胞信号转导与疾病': ['信号转导']
+      };
+      const out = [t];
+      (A[t] || []).forEach(function (x) { out.push(x); });
+      return out;
+    },
+
+    /* 内科学各篇对应导图章节 */
+    mapPianName(pian) {
+      const M = {
+        2: '呼吸系统', 3: '循环系统', 4: '消化系统', 5: '泌尿系统',
+        6: '血液系统', 7: '内分泌系统', 8: '风湿系统', 9: '中毒'
+      };
+      return M[pian] || '';
+    },
+
     /* 某道题对应的导图页 */
     mapPagesForQuestion(q) {
       const m = window.XZ && window.XZ.maps;
@@ -209,24 +284,49 @@
       if (chap) cands.push(this.mapNormTitle(chap.t));
       if (q.sec) cands.push(this.mapNormTitle(q.sec));
       if (q.kp) cands.push(this.mapNormTitle(q.kp));
-      const clean = cands.filter(function (c) { return c && c.length >= 2; });
+      let raw = cands.filter(function (c) { return c && c.length >= 2; });
+      // 加上别名
+      const withAlias = [];
+      const A = {
+        '心力衰竭': ['心衰'], '慢性心力衰竭': ['心衰'], '慢性阻塞性肺疾病': ['慢阻肺'],
+        '呼吸衰竭': ['呼衰'], '肾功能衰竭': ['肾衰'], '甲状腺功能亢进': ['甲亢'],
+        '甲状腺功能减退': ['甲减'], '冠状动脉粥样硬化性心脏病': ['冠心病'],
+        '急性心肌梗死': ['心梗'], '系统性红斑狼疮': ['狼疮'], '脂质代谢': ['脂代谢'],
+        '细胞信号转导与疾病': ['信号转导'], '能量代谢与体温': ['能量代谢', '体温'],
+        '尿的生成和排出': ['泌尿', '肾'], '水、电解质代谢紊乱和酸碱平衡失调': ['酸碱平衡'],
+        '围手术期处理': ['围手术期'], '消化性溃疡': ['溃疡'], '上消化道出血': ['消化道出血']
+      };
+      raw.forEach(function (c) { withAlias.push(c); (A[c] || []).forEach(function (x) { withAlias.push(x); }); });
+      const clean = withAlias.filter(function (c, i) { return c && c.length >= 2 && withAlias.indexOf(c) === i; });
 
-      let hit = null;
-      // 先精确，再包含
-      for (let flow = 0; flow < 2 && !hit; flow++) {
-        for (let i = 0; i < clean.length && !hit; i++) {
+      let hit = null, bestScore = 0;
+      const self = this;
+      clean.forEach(function (c) {
+        idx.forEach(function (e) {
+          const sc = self.mapScore(c, self.mapNormTitle(e.t));
+          if (sc > bestScore) { bestScore = sc; hit = e; }
+        });
+      });
+      if (!hit || bestScore < 34) {
+        const subjPages = m.pages.filter(function (p2) { return (p2.s || '').indexOf(sk) >= 0; });
+        for (let i = 0; i < clean.length; i++) {
           const c = clean[i];
-          for (let j = 0; j < idx.length; j++) {
-            const t = this.mapNormTitle(idx[j].t);
-            if (!t) continue;
-            if (flow === 0 ? t === c : (t.indexOf(c) >= 0 || c.indexOf(t) >= 0)) {
-              hit = idx[j];
-              break;
-            }
+          if (c.length < 2) continue;
+          const pg = subjPages.filter(function (p2) {
+            return (p2.txt || '').replace(/\s/g, '').indexOf(c) >= 0;
+          })[0];
+          if (pg) return [pg];
+        }
+        // 内科：按「篇」退到对应的系统章节
+        if (chap && chap.p) {
+          const sysName = this.mapPianName(chap.p);
+          if (sysName) {
+            const e2 = idx.filter(function (e) { return e.kind === 'ch' && e.t.indexOf(sysName) >= 0; })[0];
+            if (e2) hit = e2;
           }
         }
+        if (!hit) return [];
       }
-      if (!hit) return [];
       const pos = idx.indexOf(hit);
       let end = null;
       for (let k = pos + 1; k < idx.length; k++) {
