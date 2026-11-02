@@ -219,6 +219,7 @@
     marks: {},      // qid -> [{i,f,s,e,tx,k:'hl'|'ul',n:'note'}]
     hw: {},         // qid -> {w,h,u,s:[[x,y,..]]}
     keys: {},       // qid -> {v:'AB', t:ts} 模拟题自行订正的正确答案
+    imgDel: {},     // 图片删除墓碑 id -> ts（用于云端同步时同步删除）
     session: null   // 断点续做
   };
 
@@ -305,13 +306,16 @@
       const n = Store.doc.notes[qid] || { t: '', imgs: [] };
       n.imgs = n.imgs || []; n.imgs.push(id); n.ts = Date.now();
       Store.doc.notes[qid] = n; Store.save();
+      if (Store.cloud) Store.cloud.markImagesDirty();
     },
     removeNoteImage(qid, id) {
       const n = Store.doc.notes[qid]; if (!n) return;
       n.imgs = (n.imgs || []).filter(function (x) { return x !== id; });
       if (!n.t && !n.imgs.length) delete Store.doc.notes[qid];
+      Store.doc.imgDel[id] = Date.now();
       Store.save();
       kvDel('img:' + id);
+      if (Store.cloud) Store.cloud.markImagesDirty();
     },
 
     /* marks */
@@ -350,7 +354,11 @@
     },
 
     /* images */
-    async putImage(id, dataUrl) { await kvSet('img:' + id, dataUrl); },
+    async putImage(id, dataUrl) {
+      await kvSet('img:' + id, dataUrl);
+      if (Store.cloud) Store.cloud.markImagesDirty();
+    },
+    async delImage(id) { await kvDel('img:' + id); },
     async getImage(id) {
       const v = await kvGet('img:' + id);
       return typeof v === 'string' ? v : null;
@@ -456,6 +464,10 @@
     error: '',
     _timer: null,
     _busy: false,
+    _imgDirty: true,    // 图片有变动，需要拉/推
+    _imgPulled: false,
+    _imgIds: null,      // 已知「本地+云端」都有的图片 id
+    _applying: false,   // 正在应用远端图片，避免重复标脏
 
     cfg() {
       try { return JSON.parse(localStorage.getItem(CLOUD_KEY) || '{}'); } catch (e) { return {}; }
@@ -463,7 +475,21 @@
     setCfg(c) {
       try { localStorage.setItem(CLOUD_KEY, JSON.stringify(c || {})); } catch (e) { }
       this.state = (c && c.token && c.repo) ? 'idle' : 'off';
+      this._imgDirty = true; this._imgPulled = false; this._imgIds = null;
       this.emit();
+    },
+    markImagesDirty() {
+      if (this._applying) return;
+      this._imgDirty = true;
+    },
+    imgPath() {
+      const c = this.cfg();
+      if (c.imgPath) return c.imgPath;
+      return String(c.path || 'xizong.json').replace(/\.json$/i, '') + '-images.json';
+    },
+    urlFor(p, q) {
+      const c = this.cfg();
+      return 'https://api.github.com/repos/' + c.repo + '/contents/' + p + (q || '');
     },
     configured() {
       const c = this.cfg();
@@ -522,6 +548,117 @@
       throw new Error('上传冲突：多次重试仍失败');
     },
 
+    /* ---- 笔记图片同步：独立的 json 文件，避免主文件过大 ---- */
+    async pullImages() {
+      const c = this.cfg();
+      const u = this.urlFor(this.imgPath(), '?ref=' + encodeURIComponent(c.branch || 'main') + '&t=' + Date.now());
+      const r = await fetch(u, { headers: this.headers(), cache: 'no-store' });
+      if (r.status === 404) return { data: null, sha: null };
+      if (!r.ok) throw new Error('拉取图片失败 HTTP ' + r.status);
+      const j = await r.json();
+      let data = null;
+      try { data = JSON.parse(b64dec(j.content || '{}')); } catch (e) { data = null; }
+      return { data: data, sha: j.sha };
+    },
+
+    async syncImages() {
+      // 没有任何图片相关变动，且本机已拉过 → 跳过（避免每次同步都下载图片文件）
+      const refIds = new Set();
+      const notes = Store.doc.notes || {};
+      Object.keys(notes).forEach(function (qid) {
+        (notes[qid].imgs || []).forEach(function (id) { refIds.add(id); });
+      });
+      const known = this._imgIds;
+      const needPull = this._imgDirty || !this._imgPulled ||
+        (known && Array.from(refIds).some(function (id) { return !known.has(id); }));
+      if (!needPull) return;
+
+      const remote = await this.pullImages();
+      const rdata = remote.data || { imgs: {}, del: {} };
+      const del = Object.assign({}, rdata.del || {});
+      const localDel = Store.doc.imgDel || {};
+      Object.keys(localDel).forEach(function (k) {
+        if (!del[k] || localDel[k] > del[k]) del[k] = localDel[k];
+      });
+      Store.doc.imgDel = del;
+
+      this._applying = true;
+      try {
+        // 1) 应用删除：删本地文件、清掉笔记里的引用
+        for (const id in del) {
+          await Store.delImage(id);
+          Object.keys(Store.doc.notes || {}).forEach(function (qid) {
+            const n = Store.doc.notes[qid];
+            if (!n || !n.imgs || n.imgs.indexOf(id) < 0) return;
+            n.imgs = n.imgs.filter(function (x) { return x !== id; });
+            if (!n.t && !n.imgs.length) delete Store.doc.notes[qid];
+          });
+        }
+        // 2) 下载云端新增的图片
+        const rimgs = rdata.imgs || {};
+        for (const id in rimgs) {
+          if (del[id]) continue;
+          const have = await Store.getImage(id);
+          if (!have) await Store.putImage(id, rimgs[id]);
+        }
+        // 3) 收集本地图片并上传
+        const ids = new Set();
+        Object.keys(Store.doc.notes || {}).forEach(function (qid) {
+          (Store.doc.notes[qid].imgs || []).forEach(function (id) { if (!del[id]) ids.add(id); });
+        });
+        const imgs = {};
+        for (const id of ids) {
+          const d = await Store.getImage(id);
+          if (d) imgs[id] = d;
+        }
+        const payload = JSON.stringify({ v: 1, at: Date.now(), imgs: imgs, del: del });
+        const remoteIds = Object.keys(rimgs).filter(function (id) { return !del[id]; }).sort().join(',');
+        const localIds = Object.keys(imgs).sort().join(',');
+        if (localIds !== remoteIds || !remote.sha) {
+          if (payload.length > 18 * 1024 * 1024) {
+            throw new Error('笔记图片合计 ' + Math.round(payload.length / 1048576) + 'MB，超过云端同步上限，请用「导出备份」或减少图片');
+          }
+          const c = this.cfg();
+          const body = {
+            message: 'sync images (' + Object.keys(imgs).length + ')',
+            content: b64enc(payload),
+            branch: c.branch || 'main'
+          };
+          if (remote.sha) body.sha = remote.sha;
+          let r = await fetch(this.urlFor(this.imgPath(), '?t=' + Date.now()), {
+            method: 'PUT',
+            cache: 'no-store',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, this.headers()),
+            body: JSON.stringify(body)
+          });
+          if (r.status === 409 || r.status === 422) {
+            const again = await this.pullImages();
+            const b2 = {
+              message: 'sync images retry',
+              content: b64enc(JSON.stringify({ v: 1, at: Date.now(), imgs: imgs, del: del })),
+              branch: c.branch || 'main'
+            };
+            if (again.sha) b2.sha = again.sha;
+            r = await fetch(this.urlFor(this.imgPath(), '?t=' + Date.now()), {
+              method: 'PUT', cache: 'no-store',
+              headers: Object.assign({ 'Content-Type': 'application/json' }, this.headers()),
+              body: JSON.stringify(b2)
+            });
+          }
+          if (!r.ok) {
+            let detail = '';
+            try { detail = (await r.text()).slice(0, 120); } catch (e) { }
+            throw new Error('上传图片失败 HTTP ' + r.status + ' ' + detail);
+          }
+        }
+        this._imgIds = new Set(Object.keys(imgs));
+        this._imgPulled = true;
+        this._imgDirty = false;
+      } finally {
+        this._applying = false;
+      }
+    },
+
     async syncNow(opts) {
       if (!this.configured()) { this.state = 'off'; this.emit(); return false; }
       if (this._busy) return false;
@@ -530,6 +667,7 @@
       try {
         const cur = await this.pull();
         if (cur.doc) mergeDoc(Store.doc, cur.doc);
+        await this.syncImages();
         await kvSet('doc', Store.doc);
         await this.push();
         this.state = 'ok'; this.at = Date.now(); this.error = '';
