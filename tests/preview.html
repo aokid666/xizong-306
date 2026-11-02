@@ -32,6 +32,7 @@
 window.onerror=function(m,s,l,c,e){var d=document.createElement('div');d.className='errbox';d.textContent='ERR: '+m+' @'+(s||'').split('/').pop()+':'+l;document.body.appendChild(d);};
 window.addEventListener('unhandledrejection',function(ev){var d=document.createElement('div');d.className='errbox';d.textContent='REJ: '+(ev.reason&&ev.reason.stack||ev.reason);document.body.appendChild(d);});
 </script><script src="../data/meta.js"></script>
+<script src="../js/zip.js"></script>
 <script src="../js/store.js"></script>
 <script src="../js/bank.js"></script>
 <script src="../js/card.js"></script>
