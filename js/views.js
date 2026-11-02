@@ -812,6 +812,7 @@
         '<div class="maps-main" data-viewer></div>' +
         '</div>';
       shell(html);
+      app().classList.add('wide');
 
       const tocBox = app().querySelector('[data-toc]');
       tocBox.innerHTML = toc.map(function (s0, si) {
