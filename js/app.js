@@ -33,6 +33,22 @@
     Views.home();
   }
 
+  function showFatal(msg) {
+    let bar = document.getElementById('errbar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'errbar';
+      bar.style.cssText = 'position:fixed;left:8px;right:8px;top:64px;z-index:999;background:#fdecea;color:#b3261e;' +
+        'border:1px solid #f2c2bd;border-radius:8px;padding:8px 12px;font-size:12.5px;white-space:pre-wrap;';
+      bar.addEventListener('click', function () { bar.remove(); });
+      document.body.appendChild(bar);
+    }
+    bar.textContent = '⚠️ ' + msg + '（点此关闭）';
+  }
+  window.addEventListener('error', function (e) {
+    showFatal((e.message || '脚本出错') + ' @' + String(e.filename || '').split('/').pop() + ':' + e.lineno);
+  });
+
   async function boot() {
     try {
       await Store.init();
@@ -52,13 +68,21 @@
 
     // 搜索
     const search = document.getElementById('q-search');
+    const doSearch = function () {
+      const v = (search && search.value || '').trim();
+      if (!v) { if (search) search.focus(); U.toast('输入关键词后再搜索'); return; }
+      const target = '#/search/' + encodeURIComponent(v);
+      if (location.hash === target) route();     // 同一个词再搜一次也刷新
+      else location.hash = target;
+    };
     if (search) {
       search.addEventListener('keydown', function (e) {
-        if (e.key !== 'Enter') return;
-        const v = search.value.trim();
-        if (v) location.hash = '#/search/' + encodeURIComponent(v);
+        if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); doSearch(); }
       });
+      search.addEventListener('search', doSearch);
     }
+    const btnSearch = document.getElementById('btn-search');
+    if (btnSearch) btnSearch.addEventListener('click', doSearch);
     const btnSet = document.getElementById('btn-settings');
     if (btnSet) btnSet.addEventListener('click', function () { location.hash = '#/settings'; });
 
@@ -83,6 +107,14 @@
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible' && Store.cloud.configured()) Store.cloud.syncNow();
     });
+
+    // 点击当前页的导航项时也重新渲染（否则 hash 不变，看起来「没反应」）
+    document.addEventListener('click', function (e) {
+      const a = e.target.closest && e.target.closest('a[href^="#/"]');
+      if (!a) return;
+      const href = a.getAttribute('href');
+      if (href === location.hash) { e.preventDefault(); route(); }
+    }, true);
 
     window.addEventListener('hashchange', route);
     if (!location.hash) location.hash = '#/home';
