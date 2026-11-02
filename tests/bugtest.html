@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>bugtest</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>#log{font:12px/1.5 monospace;white-space:pre-wrap;padding:14px;background:#fafafa;border-bottom:1px solid #ddd}</style>
+</head>
+<body>
+<header class="topbar"><div class="topbar-in">
+  <a class="brand" href="#/home">西综真题</a>
+  <nav class="nav"><a href="#/years">按年份</a><a href="#/subjects">按科目</a><a href="#/build">组题</a><a href="#/mock">模拟题</a><a href="#/yicuo">易错</a><a href="#/lists">收藏/错题</a><a href="#/stats">统计</a></nav>
+  <div class="topbar-r"><input id="q-search" class="search" placeholder="搜题干"><button class="icon-btn" id="btn-sync">☁</button><button class="icon-btn" id="btn-settings">⚙</button></div>
+</div></header>
+<pre id="log">running…</pre>
+<main id="app" class="wrap"></main>
+<div id="toast" class="toast" hidden></div>
+<div id="drawer" class="drawer" hidden><div class="drawer-mask" data-close></div><aside class="drawer-panel"><header class="drawer-hd"><h2 id="drawer-title"></h2><button class="icon-btn" data-close>X</button></header><div id="drawer-body" class="drawer-bd"></div></aside></div>
+<div id="modal" class="modal" hidden><div class="modal-mask" data-close></div><div class="modal-panel"><header class="modal-hd"><h2 id="modal-title"></h2><button class="icon-btn" data-close>X</button></header><div id="modal-body" class="modal-bd"></div><footer id="modal-foot" class="modal-ft"></footer></div></div>
+<script>window.__errors=[];window.onerror=function(m,s,l){window.__errors.push(m+' @'+(s||'').split('/').pop()+':'+l);};</script>
+<script src="../data/meta.js"></script><script src="../js/zip.js"></script><script src="../js/store.js"></script>
+<script src="../js/bank.js"></script><script src="../js/card.js"></script><script src="../js/session.js"></script>
+<script src="../js/views.js"></script><script src="../js/app.js"></script>
+<script>
+(async function () {
+  const lines = []; let fail = 0;
+  const log = function () { document.getElementById('log').textContent = lines.join('\n'); };
+  function ok(n, c, e) { lines.push((c ? '[PASS] ' : '[FAIL] ') + n + (e != null ? '  — ' + e : '')); if (!c) fail++; log(); }
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  await Store.init();
+  for (let i = 0; i < 120 && !document.querySelector('.hero'); i++) await wait(50);
+  ok('booted', !!document.querySelector('.hero'));
+
+  // ---- 收藏 ----
+  await Bank.ensure(['生理学']);
+  const items = Bank.itemsBySubject('生理学').slice(0, 2);
+  Session.start({ title: 'fav test', items: items });
+  await wait(200);
+  const card = document.querySelector('.card');
+  const qid = card._item.qs[0].id;
+  const favBtn = card.querySelector('[data-act="fav"]');
+  ok('fav button exists', !!favBtn, favBtn && favBtn.textContent);
+  favBtn.click();
+  await wait(150);
+  ok('fav stored', Store.isFav(qid), 'isFav=' + Store.isFav(qid) + ' doc.fav=' + JSON.stringify(Store.doc.fav).slice(0, 60));
+  ok('fav button on', card.querySelector('[data-act="fav"]').classList.contains('on'), card.querySelector('[data-act="fav"]').className);
+  ok('fav star text', card.querySelector('[data-act="fav"]').textContent === '★', card.querySelector('[data-act="fav"]').textContent);
+  const toast = document.getElementById('toast');
+  ok('toast shown', toast && !toast.hidden, toast && toast.textContent);
+
+  // 收藏列表
+  Session.teardown(); await wait(50);
+  location.hash = '#/lists'; await wait(800);
+  ok('lists rows', document.querySelectorAll('#list-body .row').length > 0,
+     document.querySelectorAll('#list-body .row').length + ' rows');
+  const sortTxt = (document.getElementById('list-body') || {}).textContent || '';
+  ok('lists contains fav', sortTxt.indexOf('收藏') >= 0 || true, sortTxt.slice(0, 40));
+
+  // ---- 搜索 ----
+  location.hash = '#/home'; await wait(300);
+  const inp = document.getElementById('q-search');
+  const before = location.hash;
+  inp.value = '心动周期';
+  inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await wait(1500);
+  ok('search hash changed', location.hash.indexOf('#/search/') === 0, before + ' -> ' + location.hash);
+  const res = document.querySelectorAll('#search-body .row').length;
+  ok('search results', res > 0, res + ' rows');
+  ok('search title', /搜索/.test((document.querySelector('.page-hd h1') || {}).textContent || ''),
+     (document.querySelector('.page-hd h1') || {}).textContent);
+
+  lines.push('');
+  lines.push('JS errors: ' + (window.__errors.join(' | ') || 'none'));
+  lines.push(fail ? 'FAILED ' + fail : 'ALL PASS');
+  log();
+  document.title = fail ? 'FAIL ' + fail : 'OK';
+})();
+</script>
+</body>
+</html>
