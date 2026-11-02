@@ -288,7 +288,8 @@ body.has-pager{padding-bottom:70px}
 .hw-color.on{box-shadow:0 0 0 2px #191919}
 
 /* notes */
-.note-wrap{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;display:none}
+.note-wrap{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;display:none;
+  position:relative;z-index:6;background:var(--paper)}
 .card.note-on .note-wrap,.subq.note-on .note-wrap{display:block}
 .note-wrap textarea{
   width:100%;min-height:76px;resize:vertical;padding:10px 12px;border:1px solid var(--line);border-radius:7px;
