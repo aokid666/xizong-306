@@ -343,10 +343,17 @@
     (n.imgs || []).forEach(function (id) {
       const d = U.el('div', { class: 'im' });
       const img = U.el('img', { alt: '笔记图片' });
-      Store.getImage(id).then(function (src) { if (src) img.src = src; });
-      img.addEventListener('click', function () {
-        if (!img.src) return;
-        U.modal({ title: '笔记图片', body: '<img src="' + img.src + '" style="max-width:100%">', buttons: [{ label: '关闭', cls: 'primary' }] });
+      Store.getImage(id).then(function (src) {
+        if (src) { img.src = src; return; }
+        Store.getImageOrig(id).then(function (o) { if (o) img.src = o; });
+      });
+      img.addEventListener('click', async function () {
+        const orig = (await Store.getImageOrig(id)) || img.src;
+        if (!orig) return;
+        U.modal({
+          title: '笔记图片（原图）', body: '<img src="' + orig + '" style="max-width:100%">',
+          buttons: [{ label: '关闭', cls: 'primary' }]
+        });
       });
       const rm = U.el('button', { class: 'rm', title: '删除' }, '✕');
       rm.addEventListener('click', function (e) {
@@ -362,36 +369,15 @@
   function addImage(qid, file, wrap, card) {
     if (!file) return;
     const rd = new FileReader();
-    rd.onload = function () {
+    rd.onload = async function () {
       const id = U.uid();
-      const src = rd.result;
-      // 压缩到最大 1400px，减小占用
-      const im = new Image();
-      im.onload = function () {
-        let w = im.width, h = im.height;
-        const max = 1400;
-        if (w > max || h > max) {
-          const s = Math.min(max / w, max / h);
-          w = Math.round(w * s); h = Math.round(h * s);
-        }
-        const cv = document.createElement('canvas');
-        cv.width = w; cv.height = h;
-        cv.getContext('2d').drawImage(im, 0, 0, w, h);
-        let out = src;
-        try { out = cv.toDataURL('image/jpeg', 0.82); } catch (e) { }
-        Store.putImage(id, out).then(function () {
-          Store.addNoteImage(qid, id);
-          renderNoteImgs(wrap, qid, card);
-          if (card) refreshActs(card, card._item);
-        });
-      };
-      im.onerror = function () {
-        Store.putImage(id, src).then(function () {
-          Store.addNoteImage(qid, id);
-          renderNoteImgs(wrap, qid, card);
-        });
-      };
-      im.src = src;
+      const src = rd.result;                 // 原图，原样保存
+      await Store.putImageOrig(id, src);
+      const disp = await U.compressDataUrl(src, 1400, 0.82);   // 缩略图，仅用于列表显示
+      await Store.putImage(id, disp);
+      Store.addNoteImage(qid, id);
+      renderNoteImgs(wrap, qid, card);
+      if (card) refreshActs(card, card._item);
     };
     rd.readAsDataURL(file);
   }
