@@ -63,6 +63,8 @@
     html += '<div class="entries">' +
       entry('按年份刷题', '整套真题按题号顺序或随机，滚动 / 单题两种作答方式', '#/years') +
       entry('按科目 · 章节', '生理、生化、病理、内科、外科，逐章逐节刷', '#/subjects') +
+      entry('模拟题（天天师兄）', '课后 / 阶段测试 / 摸底 / 冲刺共 12 套，答案可自行订正', '#/mock') +
+      entry('易错小结（天天师兄）', '五科易错真题清单，按科目集中攻克', '#/yicuo') +
       entry('随机组题', '自选科目、章节、分层、年份，随机抽取指定题量', '#/build') +
       entry('收藏 / 错题 / 标记', '回顾收藏、做错的题，以及标记为过时、争议的题', '#/lists') +
       entry('学习统计', '各科目进度与正确率', '#/stats') +
@@ -498,6 +500,108 @@
     loadThen(Bank.subjectNames(), render);
   };
 
+  /* ================= 模拟题 ================= */
+  Views.mock = function () {
+    shell('<div class="empty">正在载入模拟题库…</div>');
+    Bank.ensureMock().then(function () {
+      const m = Bank.mock.meta;
+      let html = crumb([{ t: '首页', href: '#/home' }, { t: '模拟题' }]);
+      const setCount = m.sets.filter(function (x) { return x.t !== '未标注来源'; }).length;
+      html += '<div class="page-hd"><h1>天天师兄模拟题</h1><div class="sub">' +
+        '课后巩固、阶段测试、基础/冲刺摸底共 ' + setCount + ' 套、' +
+        m.subjects.reduce(function (a, s2) { return a + s2.n; }, 0) + ' 题，已按题干合并去重（同一题只保留一条，并标注来源）。' +
+        '答案来自题库，若课堂讲解不同，可在题目里点「答」自行订正。</div></div>';
+      html += '<h3 style="margin:18px 0 8px;font-family:var(--serif)">按套卷</h3><div class="list">';
+      m.sets.forEach(function (x) {
+        html += '<div class="row" data-set="' + esc(x.t) + '"><div class="grow">' +
+          '<div class="t">' + esc(x.t) + '</div><div class="d">' + x.n + ' 题</div></div>' +
+          '<span class="num">' + x.n + '</span><span class="go">开始 →</span></div>';
+      });
+      html += '</div>';
+      html += '<h3 style="margin:30px 0 8px;font-family:var(--serif)">按科目 · 章</h3><div class="list">';
+      m.subjects.forEach(function (s, si) {
+        html += '<div class="row" data-ms="' + si + '"><div class="grow">' +
+          '<div class="t">' + esc(s.name) + '</div><div class="d">' + s.chapters.length + ' 章 · ' + s.n + ' 题</div></div>' +
+          '<span class="num">' + s.n + '</span><span class="go">进入 →</span></div>';
+      });
+      html += '</div>';
+      shell(html);
+      app().addEventListener('click', function (e) {
+        const row = e.target.closest('[data-set]');
+        if (row) {
+          const set = row.dataset.set;
+          const items = Bank.mockItemsBySet(set);
+          startItems(items, '模拟题 · ' + set, set + ' · ' + items.length + ' 题');
+          return;
+        }
+        const ms = e.target.closest('[data-ms]');
+        if (ms) location.hash = '#/mock/sub/' + ms.dataset.ms;
+      });
+    }).catch(function (e) { shell('<div class="empty">模拟题库载入失败：' + esc(e.message) + '</div>'); });
+  };
+
+  Views.mockSubject = function (si) {
+    Bank.ensureMock().then(function () {
+      const s = Bank.mock.meta.subjects[+si];
+      if (!s) { location.hash = '#/mock'; return; }
+      let html = crumb([{ t: '首页', href: '#/home' }, { t: '模拟题', href: '#/mock' }, { t: s.name }]);
+      html += '<div class="page-hd"><h1>' + esc(s.name) + ' · 模拟题</h1><div class="sub">' + s.n + ' 题</div></div>';
+      html += '<div class="tree">';
+      s.chapters.forEach(function (ch, ci) {
+        html += '<details class="tree-ch"><summary><span class="caret">▶</span>' +
+          '<span class="name">' + esc(ch.t) + '</span><span class="meta">' + ch.n + ' 题</span></summary>' +
+          '<div class="ch-actions"><button class="btn sm" data-mc="' + ci + '">刷本章</button></div>';
+        ch.sec.forEach(function (sec) {
+          html += '<div class="tree-sec"><div class="st"><span>' + esc(sec.t) + '</span><span class="n">' + sec.n + '</span>' +
+            '<span style="flex:1"></span><button class="btn ghost sm" data-msec="' + esc(sec.t) + '" data-mc="' + ci + '">刷本节</button></div></div>';
+        });
+        html += '</details>';
+      });
+      html += '</div>';
+      shell(html);
+      app().addEventListener('click', function (e) {
+        const b = e.target.closest('[data-mc]');
+        if (!b) return;
+        const ch = s.chapters[+b.dataset.mc];
+        const sec = b.dataset.msec || '';
+        const items = Bank.mockItemsByChapter(s.name, ch.t, sec);
+        startItems(items, '模拟题 · ' + s.name + ' · ' + ch.t + (sec ? ' · ' + sec : ''), s.name);
+      });
+    });
+  };
+
+  /* ================= 易错小结 ================= */
+  Views.yicuo = function () {
+    Bank.ensureYicuo().then(function () {
+      const map = Bank.yicuoMap();
+      const order = ['生理学', '生物化学', '病理学', '内科学', '外科学'];
+      let html = crumb([{ t: '首页', href: '#/home' }, { t: '易错小结' }]);
+      html += '<div class="page-hd"><h1>易错小结</h1><div class="sub">天天师兄「易错小结（真题）」五科清单，共 ' +
+        Object.keys(map).reduce(function (a, k) { return a + (map[k] || []).length; }, 0) + ' 题，全部能在真题库里找到。</div></div>';
+      html += '<div class="list">';
+      order.forEach(function (s) {
+        const n = (map[s] || []).length;
+        if (!n) return;
+        html += '<div class="row" data-yc="' + esc(s) + '"><div class="grow">' +
+          '<div class="t">' + esc(s) + ' 易错 ' + n + ' 题</div>' +
+          '<div class="d">按讲义顺序排列，直接开刷</div></div>' +
+          '<span class="num">' + n + '</span><span class="go">开始 →</span></div>';
+      });
+      html += '</div>';
+      html += '<p class="hint" style="margin-top:20px">这些题本身就在真题库里，做错的会自动进「错题」，收藏与标记同样通用。</p>';
+      shell(html);
+      app().addEventListener('click', function (e) {
+        const row = e.target.closest('[data-yc]');
+        if (!row) return;
+        const subj = row.dataset.yc;
+        loadThen(Bank.subjectNames(), function () {
+          const items = Bank.yicuoItems(subj);
+          startItems(items, '易错小结 · ' + subj, subj + ' · ' + items.length + ' 组');
+        });
+      });
+    });
+  };
+
   /* ================= 统计 ================= */
   Views.stats = function () {
     Bank.ensure(Bank.subjectNames()).then(function () { renderStats(); });
@@ -553,6 +657,12 @@
       '<div class="seg" data-setseg="submitMode"><button data-v="single">每题提交</button><button data-v="chunk">每 N 题一起提交</button><button data-v="all">整卷提交</button></div>' +
       '<input class="input" type="number" min="2" max="100" data-setnum="chunk" style="width:80px">' +
       '</div></div>';
+    html += '<div class="field"><div class="k">题干信息</div><div class="v">' +
+      '<label class="chk"><input type="checkbox" data-setbool="hideMeta"> 做题时先隐藏「科目·章节·知识点」标签，提交后再显示</label>' +
+      '</div></div>';
+    html += '<div class="field"><div class="k">B 型题</div><div class="v">' +
+      '<label class="chk"><input type="checkbox" data-setbool="bGroup"> 共用备选答案的 B 型题合并显示（像试卷一样：选项只出现一次）</label>' +
+      '</div></div>';
     html += '<div class="field"><div class="k">默认模式</div><div class="v">' +
       '<div class="seg" data-setseg="mode"><button data-v="scroll">滚动（纸质版）</button><button data-v="paged">单题</button></div>' +
       '</div></div>';
@@ -566,10 +676,27 @@
       '<input type="file" accept="application/json" data-file hidden>' +
       '<span class="hint">导出包含作答记录、收藏、标记、笔记文字与手写笔迹；笔记中的图片体积较大，不含在 JSON 里。</span>' +
       '</div></div>';
+    const cf = Store.cloud.cfg();
+    html += '<div class="field"><div class="k">云端同步</div><div class="v" style="display:block">' +
+      '<div class="hint" style="margin-bottom:8px">把作答记录、收藏、标记、笔记（文字）、手写同步到一个 GitHub 仓库的 JSON 文件里，换设备也能接着做。' +
+      '需要一次 GitHub 令牌（fine-grained，仅 Contents 读写，<a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="text-decoration:underline">点此创建</a>）。令牌只存在本机浏览器，不会上传到任何地方。</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+      '<input class="input" data-cloud="repo" placeholder="owner/repo（私有仓库更安全）" value="' + esc(cf.repo || 'aokid666/xizong-306-data') + '" style="min-width:230px">' +
+      '<input class="input" data-cloud="path" placeholder="文件名 xizong.json" value="' + esc(cf.path || 'xizong.json') + '" style="width:170px">' +
+      '<input class="input" data-cloud="branch" placeholder="分支 main" value="' + esc(cf.branch || 'main') + '" style="width:110px">' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">' +
+      '<input class="input" type="password" data-cloud="token" placeholder="GitHub token（ghp_… 或 github_pat_…）" value="' + esc(cf.token || '') + '" style="min-width:330px">' +
+      '<button class="btn sm" data-act="cloud-save">保存</button>' +
+      '<button class="btn sm" data-act="cloud-sync">立即同步</button>' +
+      '<button class="btn sm" data-act="cloud-off">断开</button>' +
+      '<span class="hint" data-cloud-state></span></div>' +
+      '</div></div>';
+
     html += '<div class="field"><div class="k">存储状态</div><div class="v"><span class="hint" data-storage></span></div></div>';
-    html += '<div class="field"><div class="k">关于</div><div class="v"><span class="hint">题库共 ' + U.fmtNum(Bank.meta.total) + ' 题，' +
-      Bank.meta.years[0].y + '—' + Bank.meta.years[Bank.meta.years.length - 1].y + ' 年，来源：医考帮真题导出（顺序版）、医考帮分层刷题。' +
-      '题库数据为静态文件，不含任何服务器请求。</span></div></div>';
+    html += '<div class="field"><div class="k">关于</div><div class="v"><span class="hint">真题库 ' + U.fmtNum(Bank.meta.total) + ' 题（' +
+      Bank.meta.years[0].y + '—' + Bank.meta.years[Bank.meta.years.length - 1].y + ' 年，来源：医考帮顺序版 + 分层刷题）；' +
+      '模拟题 1,127 题（天天师兄，12 套）；易错小结 175 题。除云端同步外不含任何服务器请求。</span></div></div>';
     shell(html);
 
     const d = Store.doc.settings;
@@ -584,7 +711,15 @@
       if (ch) ch.value = d.chunk || 10;
       app().querySelector('[data-storage]').textContent = '存储方式：' + (Store.backend === 'idb' ? 'IndexedDB（推荐）' : 'localStorage（降级）') +
         '　已记录 ' + Object.keys(Store.doc.progress).length + ' 题';
+      const setb = app().querySelectorAll('[data-setbool]');
+      setb.forEach(function (x) { x.checked = !!Store.get(x.dataset.setbool); });
+      const st = app().querySelector('[data-cloud-state]');
+      if (st) st.textContent = Store.cloud.label() + (Store.cloud.error ? '（' + Store.cloud.error + '）' : '');
     }
+    document.addEventListener('xz-sync', function () {
+      const st = app().querySelector('[data-cloud-state]');
+      if (st) st.textContent = Store.cloud.label() + (Store.cloud.error ? '（' + Store.cloud.error + '）' : '');
+    });
     syncSegs();
 
     app().addEventListener('click', function (e) {
@@ -599,6 +734,26 @@
       }
       const act = e.target.closest('[data-act]');
       if (!act) return;
+      if (act.dataset.act === 'cloud-save' || act.dataset.act === 'cloud-sync' || act.dataset.act === 'cloud-off') {
+        const cfg = Store.cloud.cfg();
+        if (act.dataset.act === 'cloud-off') {
+          Store.cloud.setCfg({});
+          U.toast('已断开云端同步');
+          Views.settings();
+          return;
+        }
+        U.$$('[data-cloud]', app()).forEach(function (inp) { cfg[inp.dataset.cloud] = inp.value.trim(); });
+        Store.cloud.setCfg(cfg);
+        if (act.dataset.act === 'cloud-sync') {
+          U.toast('同步中…', 3000);
+          Store.cloud.syncNow().then(function (ok) {
+            U.toast(ok ? '同步完成' : ('同步失败：' + (Store.cloud.error || '请检查仓库与令牌')));
+          });
+        } else {
+          U.toast('已保存云端配置');
+        }
+        return;
+      }
       if (act.dataset.act === 'export') {
         const blob = Store.exportBlob();
         const a = U.el('a', { href: URL.createObjectURL(blob), download: 'xizong-backup-' + new Date().toISOString().slice(0, 10) + '.json' });
@@ -625,6 +780,7 @@
         app().querySelector('[data-fs]').textContent = e.target.value + 'px';
       }
       if (e.target.matches('[data-setnum="chunk"]')) Store.set('chunk', Math.max(2, +e.target.value || 10));
+      if (e.target.matches('[data-setbool]')) Store.set(e.target.dataset.setbool, e.target.checked);
       if (e.target.matches('[data-file]')) {
         const f = e.target.files[0];
         if (!f) return;
