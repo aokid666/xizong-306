@@ -64,13 +64,19 @@
 
   function cardHead(item, index) {
     const q0 = item.qs[0];
-    const chap = Bank.chapterMeta(q0.subj, q0.ci);
     const bits = [];
-    if (item.qs.length > 1) bits.push(tagHTML('病例题 · ' + item.qs.length + ' 小问', 'y'));
-    else bits.push(tagHTML(q0.label, 'y'));
-    bits.push(tagHTML(q0.subj + (chap ? ' · ' + (chap.p ? '第' + chap.p + '篇 ' : '') + chap.t : '')));
-    if (q0.multi) bits.push(tagHTML('多选'));
-    if (q0.kp) bits.push(tagHTML(q0.kp));
+    if (q0.multi) bits.push(tagHTML('多选', 'multi'));
+    if (q0.mock) {
+      bits.push(tagHTML(q0.set || '模拟题'));
+      bits.push(tagHTML(q0.subj + ' · ' + (q0.chapter || '') + (q0.sec ? ' · ' + q0.sec : ''), 'metatag'));
+    } else {
+      if (item.bGroup) bits.push(tagHTML('B 型题 · ' + item.qs.length + ' 问共用备选', 'y'));
+      else if (item.qs.length > 1) bits.push(tagHTML('病例题 · ' + item.qs.length + ' 小问', 'y'));
+      else bits.push(tagHTML(q0.label, 'y'));
+      const chap = Bank.chapterMeta(q0.subj, q0.ci);
+      bits.push(tagHTML(q0.subj + (chap ? ' · ' + (chap.p ? '第' + chap.p + '篇 ' : '') + chap.t : ''), 'metatag'));
+      if (q0.kp) bits.push(tagHTML(q0.kp, 'metatag'));
+    }
     return '<div class="card-hd">' +
       '<span class="card-idx">' + (index + 1) + '</span>' +
       '<div class="card-tags">' + bits.join('') +
@@ -79,6 +85,7 @@
       '<div class="card-acts">' +
       '<button class="icon-btn" data-act="fav" title="收藏">☆</button>' +
       '<button class="icon-btn" data-act="flag" title="标记（过时/争议/烂题）">⚑</button>' +
+      (q0.mock ? '<button class="icon-btn" data-act="key" title="订正正确答案（模拟题）">答</button>' : '') +
       '<button class="icon-btn" data-act="note" title="笔记">✎</button>' +
       '<button class="icon-btn" data-act="hw" title="手写批注">✍</button>' +
       '</div></div>';
@@ -90,6 +97,21 @@
         '<span class="k">' + o.k + '.</span>' +
         '<span class="t" data-field="opt' + o.k + '" data-raw="' + esc(o.v) + '">' + esc(o.v) + '</span></li>';
     }).join('') + '</ul>';
+  }
+
+  function sharedOptionsHTML(item) {
+    return '<div class="shared-opts">' +
+      '<div class="shared-hd">备选答案（第 ' + item.qs.map(function (q) { return q.n; }).join('、') + ' 题共用）</div>' +
+      '<ul class="opts plain">' + item.bShared.map(function (o) {
+        return '<li class="opt static"><span class="k">' + o.k + '.</span>' +
+          '<span class="t" data-field="sopt' + o.k + '" data-owner="' + item.qs[0].id + '" data-raw="' + esc(o.v) + '">' + esc(o.v) + '</span></li>';
+      }).join('') + '</ul></div>';
+  }
+
+  function picksHTML(q) {
+    return '<div class="picks" data-qid="' + q.id + '">' + q.opts.map(function (o) {
+      return '<button class="pick" data-k="' + o.k + '" title="' + esc(o.v) + '"><b>' + o.k + '</b></button>';
+    }).join('') + '</div>';
   }
 
   function subqHTML(q, item, ctx, idx) {
@@ -107,7 +129,7 @@
     return '<div class="subq" data-qid="' + q.id + '">' +
       head +
       '<div class="stem" data-field="stem" data-raw="' + esc(disp) + '">' + markedHTML(disp, Store.marks(q.id).filter(function (m) { return m.f === 'stem'; })) + '</div>' +
-      optionsHTML(q) +
+      (item.bGroup ? picksHTML(q) : optionsHTML(q)) +
       '<div class="verdict" hidden></div>' +
       '<details class="exp" hidden><summary>解析' + (multi ? '（多选）' : '') + '</summary>' +
       '<div class="body" data-field="exp" data-owner="' + q.id + '" data-raw="' + esc(q.exp || '（暂无解析）') + '">' +
@@ -124,6 +146,7 @@
     card.dataset.i = index;
 
     let body = '';
+    if (item.bGroup) body += sharedOptionsHTML(item);
     if (item.vignette) {
       body += '<div class="vignette" data-field="case" data-owner="' + item.qs[0].id + '" data-raw="' + esc(item.vignette) + '">' +
         markedHTML(item.vignette, Store.marks(item.qs[0].id).filter(function (m) { return m.f === 'case'; })) + '</div>';
@@ -172,7 +195,16 @@
       if (!subq) return;
       const chosen = letters(ctx.sel(q.id));
       const res = ctx.res(q.id);
-      const ansL = letters(q.ans);
+      const ansL = letters(Bank.truth(q));
+      subq.querySelectorAll('.pick').forEach(function (b) {
+        const k = b.dataset.k;
+        b.classList.remove('sel', 'correct', 'wrong', 'dim');
+        if (res) {
+          if (ansL.indexOf(k) >= 0) b.classList.add('correct');
+          else if (chosen.indexOf(k) >= 0) b.classList.add('wrong');
+          else b.classList.add('dim');
+        } else if (chosen.indexOf(k) >= 0) b.classList.add('sel');
+      });
       subq.querySelectorAll('.opt').forEach(function (li) {
         const k = li.dataset.k;
         li.classList.remove('sel', 'correct', 'wrong', 'dim', 'locked');
@@ -189,9 +221,10 @@
       if (res) {
         v.hidden = false;
         v.innerHTML = '<span class="vs ' + (res.ok ? 'ok' : 'no') + '">' + (res.ok ? '✓ 回答正确' : '✗ 回答错误') + '</span>' +
-          '<span class="ans">正确答案 <b>' + esc(q.ans.split('').join(' ')) + '</b></span>' +
+          '<span class="ans">正确答案 <b>' + esc(Bank.truth(q).split('').join(' ')) + '</b></span>' +
           '<span class="ans">你的答案 <b>' + esc(chosen.length ? chosen.join(' ') : '未作答') + '</b></span>' +
           '<span class="acts">' +
+          (q.mock ? '<button class="btn ghost sm" data-act="key">✎ 订正答案</button>' : '') +
           '<button class="btn ghost sm" data-act="exp">展开解析</button>' +
           '<button class="btn ghost sm" data-act="note">✎ 笔记</button>' +
           '<button class="btn ghost sm" data-act="hw">✍ 手写</button>' +
@@ -221,6 +254,9 @@
     if (rv) rv.style.display = allRes ? 'none' : '';
     const hint = card.querySelector('[data-hint]');
     if (hint) hint.textContent = allRes ? '' : (hasSel ? '' : '选择选项后提交');
+    // 题干标签：设置里可隐藏，作答后再显示
+    const hideMeta = !!Store.get('hideMeta') && !allRes;
+    card.querySelectorAll('.metatag').forEach(function (el) { el.hidden = hideMeta; });
 
     refreshActs(card, item);
   }
