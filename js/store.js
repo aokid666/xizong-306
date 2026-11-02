@@ -217,7 +217,8 @@
     flags: {},      // qid -> {t:'outdated'|'dispute'|'bad'|'extra'|'review', n:'', ts}
     notes: {},      // qid -> {t:'text', imgs:[id], ts}
     marks: {},      // qid -> [{i,f,s,e,tx,k:'hl'|'ul',n:'note'}]
-    hw: {},         // qid -> {w,h,s:[[x,y,..]]}
+    hw: {},         // qid -> {w,h,u,s:[[x,y,..]]}
+    keys: {},       // qid -> {v:'AB', t:ts} 模拟题自行订正的正确答案
     session: null   // 断点续做
   };
 
@@ -257,6 +258,7 @@
 
     save: U.debounce(function () {
       kvSet('doc', Store.doc);
+      if (Store.cloud) Store.cloud.schedule();
     }, 500),
     saveNow() { return kvSet('doc', Store.doc); },
 
@@ -335,7 +337,15 @@
     hw(qid) { return Store.doc.hw[qid]; },
     setHw(qid, obj) {
       if (!obj || !obj.s || !obj.s.length) delete Store.doc.hw[qid];
-      else Store.doc.hw[qid] = obj;
+      else { obj.u = Date.now(); Store.doc.hw[qid] = obj; }
+      Store.save();
+    },
+
+    /* 模拟题：自行订正的正确答案 */
+    key(qid) { const k = Store.doc.keys[qid]; return k ? k.v : ''; },
+    setKey(qid, v) {
+      if (!v) delete Store.doc.keys[qid];
+      else Store.doc.keys[qid] = { v: v, t: Date.now() };
       Store.save();
     },
 
@@ -371,6 +381,9 @@
       }
     },
 
+    /* ---------- 云端同步（GitHub 仓库） ---------- */
+    cloud: null,
+
     /* derived stats */
     stats() {
       const p = Store.doc.progress;
@@ -379,5 +392,184 @@
       return { done: done, right: right, wrong: done - right };
     }
   };
+
+  /* ============================================================
+     云端同步：把 doc 存到 GitHub 仓库的一个 JSON 文件里
+     ============================================================ */
+  const CLOUD_KEY = 'xz:cloud';
+
+  function b64enc(str) {
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+  function b64dec(b64) {
+    return decodeURIComponent(escape(atob(String(b64).replace(/\s/g, ''))));
+  }
+
+  function pickNewer(a, b, field) {
+    const ta = a && a[field] || 0, tb = b && b[field] || 0;
+    return tb > ta ? b : a;
+  }
+
+  function mergeDoc(local, remote) {
+    if (!remote) return local;
+    const out = local;
+    const groups = ['progress', 'fav', 'flags', 'notes', 'keys'];
+    groups.forEach(function (g) {
+      const r = remote[g] || {};
+      out[g] = out[g] || {};
+      Object.keys(r).forEach(function (k) {
+        const mine = out[g][k];
+        if (g === 'progress') {
+          if (!mine || (r[k].t || 0) > (mine.t || 0)) out[g][k] = r[k];
+        } else if (g === 'fav') {
+          out[g][k] = Math.max(mine || 0, r[k] || 0) || mine || r[k];
+        } else {
+          if (!mine || (r[k].ts || 0) > (mine.ts || 0)) out[g][k] = r[k];
+        }
+      });
+    });
+    // 标记：按 id 合并
+    const rm = remote.marks || {};
+    out.marks = out.marks || {};
+    Object.keys(rm).forEach(function (k) {
+      const mine = out.marks[k] || [], other = rm[k] || [];
+      const byId = {};
+      mine.concat(other).forEach(function (m) { if (m && m.i) byId[m.i] = m; });
+      const arr = Object.keys(byId).map(function (i) { return byId[i]; });
+      out.marks[k] = arr;
+    });
+    // 手写：取更新的一版
+    const rh = remote.hw || {};
+    out.hw = out.hw || {};
+    Object.keys(rh).forEach(function (k) {
+      const mine = out.hw[k], o = rh[k];
+      if (!mine) { out.hw[k] = o; return; }
+      const mu = mine.u || 0, ou = o.u || 0;
+      if (ou > mu) out.hw[k] = o;
+    });
+    return out;
+  }
+
+  const Cloud = {
+    state: 'off',       // off | idle | syncing | ok | error
+    at: 0,
+    error: '',
+    _timer: null,
+    _busy: false,
+
+    cfg() {
+      try { return JSON.parse(localStorage.getItem(CLOUD_KEY) || '{}'); } catch (e) { return {}; }
+    },
+    setCfg(c) {
+      try { localStorage.setItem(CLOUD_KEY, JSON.stringify(c || {})); } catch (e) { }
+      this.state = (c && c.token && c.repo) ? 'idle' : 'off';
+      this.emit();
+    },
+    configured() {
+      const c = this.cfg();
+      return !!(c.token && c.repo);
+    },
+    url(path) {
+      const c = this.cfg();
+      return 'https://api.github.com/repos/' + c.repo + '/contents/' + (c.path || 'xizong.json') + (path || '');
+    },
+    headers() {
+      const c = this.cfg();
+      return {
+        Authorization: 'token ' + c.token,
+        Accept: 'application/vnd.github+json'
+      };
+    },
+
+    async pull() {
+      const c = this.cfg();
+      const u = this.url('?ref=' + encodeURIComponent(c.branch || 'main') + '&t=' + Date.now());
+      const r = await fetch(u, { headers: this.headers(), cache: 'no-store' });
+      if (r.status === 404) return { doc: null, sha: null };
+      if (!r.ok) throw new Error('拉取失败 HTTP ' + r.status);
+      const j = await r.json();
+      const text = b64dec(j.content || '');
+      return { doc: JSON.parse(text), sha: j.sha };
+    },
+
+    async push() {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const c = this.cfg();
+        let sha = null;
+        try {
+          const cur = await this.pull();
+          sha = cur.sha;
+          if (cur.doc) mergeDoc(Store.doc, cur.doc);
+        } catch (e) { /* 网络问题时直接尝试写入 */ }
+        const body = {
+          message: 'sync ' + new Date().toISOString(),
+          content: b64enc(JSON.stringify(Store.doc)),
+          branch: c.branch || 'main'
+        };
+        if (sha) body.sha = sha;
+        const r = await fetch(this.url('?t=' + Date.now()), {
+          method: 'PUT',
+          cache: 'no-store',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, this.headers()),
+          body: JSON.stringify(body)
+        });
+        if (r.ok) return true;
+        if (r.status === 409 || r.status === 422) continue;   // sha 过期，重新拉取后再试
+        let detail = '';
+        try { detail = (await r.text()).slice(0, 160); } catch (e) { }
+        throw new Error('上传失败 HTTP ' + r.status + ' ' + detail);
+      }
+      throw new Error('上传冲突：多次重试仍失败');
+    },
+
+    async syncNow(opts) {
+      if (!this.configured()) { this.state = 'off'; this.emit(); return false; }
+      if (this._busy) return false;
+      this._busy = true;
+      this.state = 'syncing'; this.emit();
+      try {
+        const cur = await this.pull();
+        if (cur.doc) mergeDoc(Store.doc, cur.doc);
+        await kvSet('doc', Store.doc);
+        await this.push();
+        this.state = 'ok'; this.at = Date.now(); this.error = '';
+        this.emit();
+        return true;
+      } catch (e) {
+        this.state = 'error'; this.error = e.message || String(e);
+        this.emit();
+        return false;
+      } finally {
+        this._busy = false;
+      }
+    },
+
+    schedule() {
+      if (!this.configured()) return;
+      clearTimeout(this._timer);
+      this._timer = setTimeout(function () { Cloud.syncNow(); }, 4000);
+    },
+
+    emit() {
+      try {
+        document.dispatchEvent(new CustomEvent('xz-sync', {
+          detail: { state: Cloud.state, at: Cloud.at, error: Cloud.error }
+        }));
+      } catch (e) { }
+    },
+
+    label() {
+      const t = this.at ? U.fmtTime(this.at).slice(11) : '';
+      switch (this.state) {
+        case 'off': return '☁️ 未连接云端';
+        case 'idle': return '☁️ 等待同步';
+        case 'syncing': return '☁️ 同步中…';
+        case 'ok': return '☁️ 已同步' + (t ? ' · ' + t : '');
+        default: return '⚠️ 同步失败';
+      }
+    }
+  };
+
+  Store.cloud = Cloud;
 })();
 
