@@ -144,9 +144,11 @@
     host.innerHTML = '';
 
     const bar = U.el('div', { class: 'mv-bar' });
+    const navRow = U.el('div', { class: 'mv-nav' });
     const stage = U.el('div', { class: 'mv-stage' });
     const tools = U.el('div', { class: 'mv-tools' });
     const noteBox = U.el('div', { class: 'mv-note' });
+    if (opt.nav) host.appendChild(navRow);
     host.appendChild(bar);
     host.appendChild(stage);
     host.appendChild(tools);
@@ -230,11 +232,7 @@
       const z = e.target.closest('[data-mvzoom]');
       if (z) {
         const pz = pages[idx];
-        U.modal({
-          title: '第 ' + pz.n + ' 页 · ' + (pz.c || pz.s || ''),
-          body: '<div style="overflow:auto;max-height:78vh"><img src="data/maps/' + pz.img + '" style="width:' + (pz.w || 1500) + 'px;max-width:none;display:block"></div>',
-          buttons: [{ label: '关闭', cls: 'primary' }]
-        });
+        U.zoom('data/maps/' + pz.img, '第 ' + pz.n + ' 页');
         return;
       }
       const t2 = e.target.closest('[data-mvt2]');
@@ -255,6 +253,50 @@
       const k = pages.findIndex(function (p) { return p.n === opt.startPage; });
       idx = k >= 0 ? k : 0;
     }
+
+    function jumpTo(n) {
+      if (!n) return;
+      const k = pages.findIndex(function (p) { return p.n === +n; });
+      if (k >= 0) { idx = k; renderPage(); }
+    }
+
+    function fillChaps(si) {
+      const toc = Bank.mapToc();
+      const sub = toc[si] || { chapters: [] };
+      const sel = navRow.querySelector('[data-mvn-chap]');
+      sel.innerHTML = sub.chapters.map(function (ch) {
+        return '<option value="' + (ch.p || 1) + '">' + esc(ch.t) + '</option>';
+      }).join('');
+    }
+
+    if (opt.nav) {
+      const toc = Bank.mapToc();
+      navRow.innerHTML = '<select class="select" data-mvn-subj>' +
+        toc.map(function (s0, i) { return '<option value="' + i + '">' + esc(s0.t) + '</option>'; }).join('') +
+        '</select><select class="select" data-mvn-chap></select>' +
+        '<input class="input" type="number" min="1" max="' + pages.length + '" data-mvn-page placeholder="页码" style="width:70px">' +
+        '<span class="hint">共 ' + pages.length + ' 页</span>';
+      fillChaps(0);
+      const cur = pages[idx] || {};
+      const curSub = toc.findIndex(function (s0) { return (cur.s || '').indexOf(s0.t) >= 0; });
+      const subjSel = navRow.querySelector('[data-mvn-subj]');
+      if (curSub >= 0) { subjSel.value = String(curSub); fillChaps(curSub); }
+      const chapSel = navRow.querySelector('[data-mvn-chap]');
+      const opts = Array.prototype.slice.call(chapSel.options);
+      for (let i = opts.length - 1; i >= 0; i--) {
+        if (+opts[i].value <= (cur.n || 1)) { chapSel.value = opts[i].value; break; }
+      }
+      subjSel.addEventListener('change', function () {
+        fillChaps(+subjSel.value);
+        const sel2 = navRow.querySelector('[data-mvn-chap]');
+        jumpTo(+sel2.value);
+      });
+      chapSel.addEventListener('change', function () { jumpTo(+chapSel.value); });
+      navRow.querySelector('[data-mvn-page]').addEventListener('change', function (e) {
+        jumpTo(+e.target.value);
+      });
+    }
+
     renderPage();
   }
 
@@ -265,11 +307,11 @@
       return '<figure class="map-fig"><img src="data/maps/' + p.img + '" alt="思维导图" loading="lazy">' +
         '<figcaption>第 ' + p.n + ' 页 · ' + esc(p.c || p.s || '') + '</figcaption></figure>';
     }).join('');
-    host.addEventListener('click', function (e) {
+    host.onclick = function (e) {
       const img = e.target.closest('img');
       if (!img) return;
-      U.modal({ title: '思维导图', body: '<img src="' + img.src + '" style="max-width:100%">', buttons: [{ label: '关闭', cls: 'primary' }] });
-    }, { once: true });
+      U.zoom(img.src, '思维导图');
+    };
   }
 
   /* ---------------- 对外 ---------------- */
@@ -294,7 +336,7 @@
         if (d) d.querySelector('.drawer-panel').classList.add('wide');
         const host = U.el('div', { class: 'mv-host' });
         box.appendChild(host);
-        viewer(host, pages, {});
+        viewer(host, Bank.mapPages(), { nav: true, startPage: pages[0].n });
         U._drawerOnClose = function () {
           if (d) d.querySelector('.drawer-panel').classList.remove('wide');
         };
