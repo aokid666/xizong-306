@@ -291,18 +291,18 @@
     },
 
     mockSets() {
-      const c = {};
-      (this.mock ? this.mock.list : []).forEach(function (q) { c[q.set] = (c[q.set] || 0) + 1; });
-      return Object.keys(c).map(function (k) { return { t: k, n: c[k] }; });
+      if (!this.mock || !this.mock.meta.sets) return [];
+      return this.mock.meta.sets.map(function (s) { return { t: s.t, n: s.n }; });
     },
 
     mockItemsBySet(setName) {
-      const qs = (this.mock ? this.mock.list : []).filter(function (q) { return q.set === setName; });
-      qs.sort(function (a, b) {
-        if (a.subj !== b.subj) return a.subj < b.subj ? -1 : 1;
-        return a.n - b.n;
-      });
-      return qs.map(function (q) { return { key: 'q:' + q.id, qs: [q], vignette: '', tails: [q.stem], cid: '' }; });
+      if (!this.mock) return [];
+      const set = (this.mock.meta.sets || []).filter(function (s) { return s.t === setName; })[0];
+      if (!set) return [];
+      const list = this.mock.list;
+      return set.qs.map(function (i) { return list[i]; })
+        .filter(Boolean)
+        .map(function (q) { return { key: 'q:' + q.id, qs: [q], vignette: '', tails: [q.stem], cid: '' }; });
     },
 
     mockItemsByChapter(subj, chapter, sec) {
