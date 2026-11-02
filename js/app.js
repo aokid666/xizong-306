@@ -23,6 +23,9 @@
     if (hash === '#/subjects') return Views.subjects();
     if (hash.indexOf('#/subject/') === 0) return Views.subject(decodeURIComponent(hash.slice('#/subject/'.length)));
     if (hash === '#/build') return Views.build();
+    if (hash === '#/mock') return Views.mock();
+    if (hash.indexOf('#/mock/sub/') === 0) return Views.mockSubject(hash.slice('#/mock/sub/'.length));
+    if (hash === '#/yicuo') return Views.yicuo();
     if (hash === '#/lists') return Views.lists();
     if (hash === '#/stats') return Views.stats();
     if (hash === '#/settings') return Views.settings();
@@ -58,6 +61,28 @@
     }
     const btnSet = document.getElementById('btn-settings');
     if (btnSet) btnSet.addEventListener('click', function () { location.hash = '#/settings'; });
+
+    // 云端同步：启动时拉一次 + 顶栏状态
+    const btnSync = document.getElementById('btn-sync');
+    const paintSync = function () {
+      if (!btnSync) return;
+      const c = Store.cloud;
+      btnSync.textContent = c.state === 'ok' ? '☁' : (c.state === 'error' ? '⚠' : '☁');
+      btnSync.title = c.label();
+      btnSync.classList.toggle('on', c.state === 'ok');
+    };
+    document.addEventListener('xz-sync', paintSync);
+    paintSync();
+    if (btnSync) btnSync.addEventListener('click', function () {
+      if (!Store.cloud.configured()) { location.hash = '#/settings'; U.toast('先在设置里配置云端同步'); return; }
+      Store.cloud.syncNow().then(function (ok) { U.toast(ok ? '已同步' : ('同步失败：' + (Store.cloud.error || ''))); });
+    });
+    if (Store.cloud.configured()) {
+      Store.cloud.syncNow().then(function () { paintSync(); });
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && Store.cloud.configured()) Store.cloud.syncNow();
+    });
 
     window.addEventListener('hashchange', route);
     if (!location.hash) location.hash = '#/home';
