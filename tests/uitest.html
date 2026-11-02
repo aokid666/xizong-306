@@ -74,6 +74,9 @@
     const card = $('.card');
     const stem = card.querySelector('.stem');
     const firstText = stem.firstChild;
+    if (!(firstText && firstText.nodeType === 3)) {
+      lines.push('   [dbg] stemHTML=' + JSON.stringify(stem.innerHTML.slice(0, 80)) + ' cards=' + document.querySelectorAll('.card').length);
+    }
     if (firstText && firstText.nodeType === 3) {
       const r = document.createRange();
       r.setStart(firstText, 0); r.setEnd(firstText, Math.min(6, firstText.nodeValue.length));
@@ -99,8 +102,8 @@
     flagBtn.click(); await wait(80);
     ok('flag stored', Store.flag(qid) && Store.flag(qid).t === 'dispute');
     card.querySelector('[data-act="note"]').click(); await wait(80);
-    const ta = card.querySelector('[data-note-input]');
-    ok('note panel', !!ta);
+    const ta = card.querySelector('.note-wrap[data-open="1"] .nb-text');
+    ok('note panel', !!ta, card.querySelector('.note-wrap') ? 'wrap exists' : 'no wrap');
     if (ta) {
       ta.value = '记一笔：注意鉴别';
       ta.dispatchEvent(new Event('input', { bubbles: true }));
