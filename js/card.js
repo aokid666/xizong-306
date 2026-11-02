@@ -355,11 +355,24 @@
           buttons: [{ label: '关闭', cls: 'primary' }]
         });
       });
-      const rm = U.el('button', { class: 'rm', title: '删除' }, '✕');
+      const rm = U.el('button', { class: 'rm', title: '删除这张图片' }, '✕');
       rm.addEventListener('click', function (e) {
         e.stopPropagation();
-        Store.removeNoteImage(qid, id);
-        renderNoteImgs(wrap, qid, card);
+        U.modal({
+          title: '删除这张笔记图片？',
+          body: '<p>会把这张图片从本机删除；如果开了云端同步，云端也会一起删除。删除后无法恢复。</p>',
+          buttons: [
+            { label: '取消' },
+            {
+              label: '删除', cls: 'primary', onClick: function () {
+                Store.removeNoteImage(qid, id);
+                renderNoteImgs(wrap, qid, card);
+                if (card) refreshActs(card, card._item);
+                U.toast('已删除');
+              }
+            }
+          ]
+        });
       });
       d.appendChild(img); d.appendChild(rm);
       box.appendChild(d);
@@ -505,12 +518,30 @@
 
     erase(card, x, y) {
       const d = this.data(card);
+      const cv = this.canvas(card);
+      // 画布可能因为笔记展开、解析展开而重新缩放，橡皮坐标要换算回笔迹原始坐标
+      const scale = (d.w && cv._lw) ? (cv._lw / d.w) : 1;
+      const px = x / (scale || 1), py = y / (scale || 1);
+      const R = 12;                       // 橡皮半径（像素）
+      const R2 = R * R;
+      function dist2Seg(ax, ay, bx, by, x, y) {
+        const vx = bx - ax, vy = by - ay;
+        const wx = x - ax, wy = y - ay;
+        const len2 = vx * vx + vy * vy;
+        let t = len2 ? (wx * vx + wy * vy) / len2 : 0;
+        t = Math.max(0, Math.min(1, t));
+        const dx = x - (ax + t * vx), dy = y - (ay + t * vy);
+        return dx * dx + dy * dy;
+      }
       const before = d.s.length;
       d.s = d.s.filter(function (st) {
         const pts = st.p || st;
-        for (let i = 0; i < pts.length - 1; i += 2) {
-          const dx = pts[i] - x, dy = pts[i + 1] - y;
-          if (dx * dx + dy * dy < 140) return false;
+        if (pts.length <= 2) {
+          const dx = pts[0] - px, dy = pts[1] - py;
+          return dx * dx + dy * dy > R2;
+        }
+        for (let i = 0; i + 3 < pts.length; i += 2) {
+          if (dist2Seg(pts[i], pts[i + 1], pts[i + 2], pts[i + 3], px, py) <= R2) return false;
         }
         return true;
       });
