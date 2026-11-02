@@ -317,30 +317,97 @@
       Store.save();
     },
 
-    /* notes */
-    note(qid) { return Store.doc.notes[qid]; },
-    setNote(qid, txt) {
-      const n = Store.doc.notes[qid] || { imgs: [] };
-      n.t = txt; n.ts = Date.now();
-      if (!txt && !(n.imgs && n.imgs.length)) delete Store.doc.notes[qid];
-      else Store.doc.notes[qid] = n;
+    /* notes：多段落（文字 / 图片可任意排序） */
+    note(qid) {
+      const n = Store.doc.notes[qid];
+      if (!n) return null;
+      if (n.v === 2 && n.blocks) return n;
+      const blocks = [];
+      if (n.t) blocks.push({ i: U.uid(), k: 't', v: n.t });
+      (n.imgs || []).forEach(function (id) { blocks.push({ i: U.uid(), k: 'i', v: id }); });
+      const out = { v: 2, blocks: blocks, ts: n.ts || Date.now() };
+      Store.doc.notes[qid] = out;
+      return out;
+    },
+    setNoteBlocks(qid, blocks) {
+      blocks = (blocks || []).filter(function (b) {
+        return b && ((b.k === 't' && String(b.v || '').trim()) || (b.k === 'i' && b.v));
+      });
+      if (!blocks.length) delete Store.doc.notes[qid];
+      else Store.doc.notes[qid] = { v: 2, blocks: blocks, ts: Date.now() };
       Store.save();
     },
-    addNoteImage(qid, id) {
-      const n = Store.doc.notes[qid] || { t: '', imgs: [] };
-      n.imgs = n.imgs || [];
-      if (n.imgs.indexOf(id) < 0) n.imgs.push(id);
+    addNoteBlock(qid, block) {
+      const n = Store.note(qid) || { v: 2, blocks: [] };
+      n.blocks = n.blocks || [];
+      block.i = U.uid();
+      n.blocks.push(block);
       n.ts = Date.now();
-      Store.doc.notes[qid] = n; Store.save();
+      Store.doc.notes[qid] = n;
+      Store.save();
+      return block;
+    },
+    updateNoteBlock(qid, bid, text) {
+      const n = Store.note(qid);
+      if (!n) return;
+      (n.blocks || []).forEach(function (b) { if (b.i === bid) b.v = text; });
+      n.ts = Date.now();
+      Store.save();
+    },
+    removeNoteBlock(qid, bid) {
+      const n = Store.note(qid);
+      if (!n) return;
+      const b = (n.blocks || []).filter(function (x) { return x.i === bid; })[0];
+      if (b && b.k === 'i') {
+        Store.doc.imgDel[b.v] = Date.now();
+        kvDel('img:' + b.v);
+        kvDel('imgorig:' + b.v);
+      }
+      n.blocks = (n.blocks || []).filter(function (x) { return x.i !== bid; });
+      if (!n.blocks.length) delete Store.doc.notes[qid];
+      else Store.doc.notes[qid] = n;
+      Store.save();
+      if (Store.cloud) Store.cloud.markImagesDirty();
+    },
+    moveNoteBlock(qid, bid, dir) {
+      const n = Store.note(qid);
+      if (!n) return;
+      const a = n.blocks || [];
+      let i = -1;
+      for (let k = 0; k < a.length; k++) if (a[k].i === bid) { i = k; break; }
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= a.length) return;
+      const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+      n.ts = Date.now();
+      Store.save();
+    },
+    setNote(qid, txt) {
+      const n = Store.note(qid);
+      const blocks = n ? n.blocks.slice() : [];
+      const firstText = blocks.filter(function (b) { return b.k === 't'; })[0];
+      if (firstText) firstText.v = txt;
+      else if (txt) blocks.unshift({ i: U.uid(), k: 't', v: txt });
+      Store.setNoteBlocks(qid, blocks);
+    },
+    addNoteImage(qid, id) {
+      const n = Store.note(qid) || { v: 2, blocks: [] };
+      n.blocks = n.blocks || [];
+      if (!n.blocks.some(function (b) { return b.k === 'i' && b.v === id; })) {
+        n.blocks.push({ i: U.uid(), k: 'i', v: id });
+      }
+      n.ts = Date.now();
+      Store.doc.notes[qid] = n;
+      Store.save();
       if (Store.cloud) Store.cloud.markImagesDirty();
     },
     removeNoteImage(qid, id) {
-      const n = Store.doc.notes[qid]; if (!n) return;
-      n.imgs = (n.imgs || []).filter(function (x) { return x !== id; });
-      if (!n.t && !n.imgs.length) delete Store.doc.notes[qid];
+      const n = Store.note(qid); if (!n) return;
+      n.blocks = (n.blocks || []).filter(function (b) { return !(b.k === 'i' && b.v === id); });
+      if (!n.blocks.length) delete Store.doc.notes[qid];
       Store.doc.imgDel[id] = Date.now();
       Store.save();
       kvDel('img:' + id);
+      kvDel('imgorig:' + id);
       if (Store.cloud) Store.cloud.markImagesDirty();
     },
 
@@ -420,7 +487,8 @@
       const ids = new Set();
       const notes = Store.doc.notes || {};
       Object.keys(notes).forEach(function (q) {
-        (notes[q].imgs || []).forEach(function (id) { ids.add(id); });
+        const n = Store.note(q);
+        (n && n.blocks ? n.blocks : []).forEach(function (b) { if (b.k === 'i' && b.v) ids.add(b.v); });
       });
       return Array.from(ids);
     },
