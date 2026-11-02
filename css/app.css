@@ -25,6 +25,66 @@
   --lh:1.85;
   --topbar-h:58px;
 }
+/* ---------- 夜间模式 ---------- */
+html[data-theme="dark"]{
+  --ink:#e9e6e1;
+  --ink-2:#cdc9c2;
+  --muted:#a29d95;
+  --faint:#7e7972;
+  --paper:#141312;
+  --paper-2:#1b1a18;
+  --line:#332f2b;
+  --line-2:#262320;
+  --sel:#2b2824;
+  --green:#63c983;
+  --green-bg:#152519;
+  --red:#e87b7b;
+  --red-bg:#2a1919;
+  --hl:#6b5a1c;
+  --ul:#8aa7e0;
+  --shadow:0 10px 40px rgba(0,0,0,.55);
+}
+html[data-theme="dark"] .entry{background:var(--paper-2)}
+html[data-theme="dark"] .entry:hover{background:#211f1c}
+html[data-theme="dark"] .topbar{background:rgba(20,19,18,.96)}
+html[data-theme="dark"] .search:focus{background:#1b1a18}
+html[data-theme="dark"] .seg button{background:#1b1a18;color:var(--ink-2)}
+html[data-theme="dark"] .seg button.on{background:var(--ink);color:#141312}
+html[data-theme="dark"] .opt{background:#1b1a18}
+html[data-theme="dark"] .btn{background:#1b1a18}
+html[data-theme="dark"] .drawer-panel,
+html[data-theme="dark"] .modal-panel{background:#1b1a18}
+html[data-theme="dark"] .drawer-hd,html[data-theme="dark"] .modal-hd{border-color:var(--line)}
+html[data-theme="dark"] .float-tools{background:#2a2723;border-color:var(--line);box-shadow:0 6px 24px rgba(0,0,0,.5)}
+html[data-theme="dark"] .float-tools button{color:var(--ink)}
+html[data-theme="dark"] .toast{background:#2a2723;color:#f0ece5;border-color:var(--line)}
+html[data-theme="dark"] .row:hover{background:#1b1a18}
+html[data-theme="dark"] .tag{background:#1b1a18}
+html[data-theme="dark"] .code,
+html[data-theme="dark"] pre{background:#1b1a18}
+html[data-theme="dark"] mark.hl{background:#6b5a1c;color:#f4f0e8}
+html[data-theme="dark"] mark.ul{color:#a9c2ee;text-decoration-color:#8aa7e0}
+html[data-theme="dark"] .opt.correct{background:#152519;border-color:#2d5138}
+html[data-theme="dark"] .opt.wrong{background:#2a1919;border-color:#5a2b2b}
+html[data-theme="dark"] .opt.pick{border-color:#8aa7e0}
+html[data-theme="dark"] .card{background:var(--paper-2)}
+html[data-theme="dark"] .nb,
+html[data-theme="dark"] .nb-text,
+html[data-theme="dark"] .nb-img{background:#1b1a18}
+html[data-theme="dark"] .sf,
+html[data-theme="dark"] .sf-chip,
+html[data-theme="dark"] .link-chip,
+html[data-theme="dark"] .kp{background:#1b1a18}
+html[data-theme="dark"] .mv-stage{background:#1b1a18}
+/* 图片/导图反色（可在设置里关掉） */
+html[data-theme="dark"]:not(.no-invert) .mv-img,
+html[data-theme="dark"]:not(.no-invert) .mv-hw,
+html[data-theme="dark"]:not(.no-invert) .map-fig img,
+html[data-theme="dark"]:not(.no-invert) .nb-img img,
+html[data-theme="dark"]:not(.no-invert) .zoom-img{
+  filter:invert(1) hue-rotate(180deg);
+}
+
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{
