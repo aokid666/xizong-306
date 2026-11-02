@@ -78,6 +78,51 @@
   ok('stroke erased after resize', !d2 || d2.s.length === 0, d2 ? ('strokes=' + d2.s.length) : 'deleted');
   ok('canvas cleared', true);
 
+  await Bank.ensure(['内科学']);
+  const caseQ = Bank.loaded['内科学'].filter(function (q) { return q.clus; })[0];
+  const caseItem = Bank.itemOf(caseQ);
+  Session.start({ title: 'anchor', items: [caseItem] });
+  await wait(300);
+  const c2 = $('.card');
+  const subqs = c2.querySelectorAll('.subq');
+  if (subqs.length >= 2) {
+    c2.querySelector('[data-act="hw"]').click();
+    await wait(150);
+    const cv2 = c2.querySelector('canvas.hw-layer');
+    const r2 = cv2.getBoundingClientRect();
+    const target = subqs[1].getBoundingClientRect();
+    const y0 = target.top - r2.top + 25;
+    const ev = (type, x, y) => cv2.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: r2.left + x, clientY: r2.top + y, pointerId: 21 }));
+    ev('pointerdown', 40, y0); ev('pointermove', 120, y0 + 20); ev('pointerup', 120, y0 + 20);
+    await wait(200);
+    const cid = caseItem.qs[0].id;
+    const st = (Store.hw(cid).s || [])[0];
+    ok('stroke anchored to subq', !!st && st.a === 1, st ? ('a=' + st.a + ' ay=' + Math.round(st.ay)) : 'none');
+    const beforeTop = subqs[1].getBoundingClientRect().top;
+    c2.querySelector('.opt').click();
+    await wait(60);
+    const sb = c2.querySelector('[data-act="submit"]');
+    if (sb) sb.click();
+    await wait(250);
+    const exp = c2.querySelectorAll('details.exp')[0];
+    if (exp) { exp.open = true; await wait(200); }
+    const afterTop = subqs[1].getBoundingClientRect().top;
+    const delta = afterTop - beforeTop;
+    const shift = window.__HW.blockShift(c2, st, 1);
+    ok('content shifted', Math.abs(delta) > 2, 'delta=' + Math.round(delta));
+    ok('stroke follows block', Math.abs(shift - delta) < 2, 'shift=' + Math.round(shift) + ' delta=' + Math.round(delta));
+    c2.querySelector('[data-hw="eraser"]').click();
+    await wait(80);
+    const rr2 = cv2.getBoundingClientRect();
+    cv2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: rr2.left + 80, clientY: rr2.top + y0 + 10 + delta, pointerId: 22 }));
+    await wait(250);
+    const after = Store.hw(cid);
+    ok('eraser hits moved stroke', !after || after.s.length === 0, after ? ('strokes=' + after.s.length) : 'deleted');
+  } else {
+    ok('case card has subqs', false, subqs.length + '');
+  }
+  Session.teardown();
+
   lines.push(''); lines.push('JS errors: ' + (window.__errors.join(' | ') || 'none'));
   lines.push(fail ? 'FAILED ' + fail : 'ALL PASS');
   log();
