@@ -421,10 +421,12 @@ table.tb td.n{font-family:var(--mono);text-align:right}
 [hidden]{display:none!important}
 
 @media (max-width:640px){
-  #q-search{display:none}
+  #q-search{width:92px;font-size:12.5px;padding:6px 8px}
+  #q-search:focus{width:130px}
   .session-tools{gap:4px}
   .session-tools .btn{padding:5px 9px;font-size:12px}
-  .card-acts .icon-btn{width:26px;height:26px}
+  .card-acts .icon-btn{width:32px;height:32px;font-size:15px}
+  .card-acts{gap:4px}
 }
 @media print{
   .topbar,.session-bar,.pager,.card-acts,.hw-tools,.foot{display:none!important}
