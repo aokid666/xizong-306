@@ -511,8 +511,8 @@
       let html = crumb([{ t: '首页', href: '#/home' }, { t: '模拟题' }]);
       const setCount = m.sets.filter(function (x) { return x.t !== '未标注来源'; }).length;
       html += '<div class="page-hd"><h1>天天师兄模拟题</h1><div class="sub">' +
-        '课后巩固、阶段测试、基础/冲刺摸底共 ' + setCount + ' 套、' +
-        m.subjects.reduce(function (a, s2) { return a + s2.n; }, 0) + ' 题，已按题干合并去重（同一题只保留一条，并标注来源）。' +
+        '课后巩固、阶段测试、基础/冲刺摸底共 ' + setCount + ' 套、' + Bank.mock.list.length + ' 题，' +
+        '题号与顺序和原试卷一致，跨套重复的题只存一份。' +
         '答案来自题库，若课堂讲解不同，可在题目里点「答」自行订正。</div></div>';
       html += '<h3 style="margin:18px 0 8px;font-family:var(--serif)">按套卷</h3><div class="list">';
       m.sets.forEach(function (x) {
@@ -649,6 +649,59 @@
     shell(html);
   }
 
+  /* ================= 备份：ZIP（含原图） ================= */
+  async function exportZip() {
+    try {
+      U.toast('正在打包…', 8000);
+      const entries = [];
+      entries.push({
+        name: 'data.json',
+        data: new TextEncoder().encode(JSON.stringify({ app: 'xizong-brush', v: 1, doc: Store.doc }, null, 1))
+      });
+      const ids = Store.imageIds();
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        const d = (await Store.getImageOrig(id)) || (await Store.getImage(id));
+        if (!d) continue;
+        const mime = (String(d).match(/^data:([^;]+)/) || [])[1] || 'image/png';
+        entries.push({ name: 'notes/' + id + '.' + ZIP.extOf(mime), data: ZIP.dataUrlToBytes(d) });
+      }
+      const blob = ZIP.create(entries);
+      const a = U.el('a', {
+        href: URL.createObjectURL(blob),
+        download: '西综刷题备份-' + new Date().toISOString().slice(0, 10) + '.zip'
+      });
+      document.body.appendChild(a); a.click(); a.remove();
+      U.toast('已导出 ' + entries.length + ' 个文件');
+    } catch (e) {
+      U.toast('导出失败：' + e.message, 4000);
+    }
+  }
+
+  async function importZip(file) {
+    try {
+      U.toast('正在读取备份…', 8000);
+      const entries = await ZIP.read(file);
+      const dataEntry = entries.filter(function (e) { return e.name === 'data.json'; })[0];
+      if (!dataEntry) throw new Error('压缩包里没有 data.json');
+      const obj = JSON.parse(new TextDecoder().decode(dataEntry.data));
+      await Store.importDoc(obj);
+      let n = 0;
+      for (let i = 0; i < entries.length; i++) {
+        const e = entries[i];
+        if (e.name.indexOf('notes/') !== 0) continue;
+        const id = e.name.slice(6).replace(/\.[^.]+$/, '');
+        const dataUrl = ZIP.bytesToDataUrl(e.data, ZIP.mimeOf(e.name));
+        await Store.putImageOrig(id, dataUrl);
+        await Store.putImage(id, await U.compressDataUrl(dataUrl, 1400, 0.82));
+        n++;
+      }
+      U.toast('导入完成：' + n + ' 张图片');
+    } catch (e) {
+      U.toast('导入失败：' + e.message, 4000);
+    }
+  }
+
   /* ================= 设置 ================= */
   Views.settings = function () {
     let html = crumb([{ t: '首页', href: '#/home' }, { t: '设置' }]);
@@ -673,16 +726,18 @@
       '<input type="range" min="15" max="21" step="1" data-setnum="fontSize" style="width:220px">' +
       '<span class="hint" data-fs>17px</span></div></div>';
     html += '<div class="field"><div class="k">数据</div><div class="v">' +
-      '<button class="btn sm" data-act="export">导出备份（JSON）</button>' +
-      '<button class="btn sm" data-act="import">导入备份</button>' +
+      '<button class="btn sm" data-act="exportzip">导出备份 ZIP（含原图）</button>' +
+      '<button class="btn sm" data-act="importzip">导入备份 ZIP</button>' +
+      '<button class="btn sm" data-act="export">导出 JSON</button>' +
+      '<button class="btn sm" data-act="import">导入 JSON</button>' +
       '<button class="btn sm" data-act="reset">清空所有记录</button>' +
-      '<input type="file" accept="application/json" data-file hidden>' +
-      '<span class="hint">导出包含作答记录、收藏、标记、笔记文字与手写笔迹；笔记图片不含在本地 JSON 里，请用「云端同步」备份。</span>' +
+      '<input type="file" accept="application/json,.zip,application/zip" data-file hidden>' +
+      '<span class="hint">ZIP 备份包含全部记录 + 笔记<strong>原图</strong>（notes/ 目录），可在另一台设备一键恢复；JSON 只含文字与手写笔迹。</span>' +
       '</div></div>';
     const cf = Store.cloud.cfg();
     html += '<div class="field"><div class="k">云端同步</div><div class="v" style="display:block">' +
-      '<div class="hint" style="margin-bottom:8px">把作答记录、收藏、标记、笔记（<b>文字 + 图片</b>）、手写同步到 GitHub 仓库里，换设备也能接着做。' +
-      '图片单独存一个 <code>*-images.json</code>，只有增删图片时才会上传。' +
+      '<div class="hint" style="margin-bottom:8px">把作答记录、收藏、标记、笔记（<b>文字 + 原图</b>）、手写同步到 GitHub 仓库里，换设备也能接着做。' +
+      '图片按原图存在 <code>notes/</code> 目录，每张一个文件，只有新增/删除图片时才会上传。' +
       '需要一次 GitHub 令牌（fine-grained，仅 Contents 读写，<a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="text-decoration:underline">点此创建</a>）。令牌只存在本机浏览器，不会上传到任何地方。</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
       '<input class="input" data-cloud="repo" placeholder="owner/repo（私有仓库更安全）" value="' + esc(cf.repo || 'aokid666/xizong-306-data') + '" style="min-width:230px">' +
@@ -765,6 +820,8 @@
         U.toast('已导出');
       }
       if (act.dataset.act === 'import') app().querySelector('[data-file]').click();
+      if (act.dataset.act === 'exportzip') exportZip();
+      if (act.dataset.act === 'importzip') app().querySelector('[data-file]').click();
       if (act.dataset.act === 'reset') {
         U.modal({
           title: '清空所有记录？', body: '<p>作答记录、收藏、标记、笔记、手写都会删除，且无法恢复。建议先导出备份。</p>',
@@ -788,6 +845,7 @@
       if (e.target.matches('[data-file]')) {
         const f = e.target.files[0];
         if (!f) return;
+        if (/\.zip$/i.test(f.name)) { importZip(f).then(function () { Views.settings(); }); return; }
         const rd = new FileReader();
         rd.onload = function () {
           try {
