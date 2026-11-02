@@ -53,6 +53,52 @@ window.addEventListener('unhandledrejection',function(ev){var d=document.createE
     if (v === 'years') { location.hash = '#/years'; return; }
     if (v === 'lists') { location.hash = '#/lists'; return; }
 
+    if (v === 'bgroup') {
+      Store.set('bGroup', true);
+      await Bank.ensureAll();
+      const bq = Bank.loaded['生理学'].filter(function (q) { return q.t === 'B'; })[0];
+      const all = Bank.itemsByYear(bq.y, {});
+      const bItems = all.filter(function (it) { return it.bGroup; }).slice(0, 2);
+      Session.start({ title: 'B 型题（共用备选）预览', items: bItems });
+      await wait(200);
+      const c = document.querySelector('.card');
+      if (c) {
+        const p1 = c.querySelector('.pick[data-k="A"]');
+        if (p1) p1.click();
+        const sb = c.querySelector('[data-act="submit"]');
+        if (sb) sb.click();
+      }
+      await wait(200);
+      document.title = 'preview-bgroup';
+      return;
+    }
+    if (v === 'mock') {
+      await Bank.ensureMock();
+      const items = Bank.mockItemsBySet('生理阶段测试').slice(0, 3);
+      Session.start({ title: '模拟题 · 生理阶段测试', items: items });
+      await wait(200);
+      const c = document.querySelector('.card');
+      if (c) {
+        c.querySelector('.opt').click();
+        await wait(40);
+        const sb = c.querySelector('[data-act="submit"]');
+        if (sb) sb.click();
+      }
+      await wait(200);
+      document.title = 'preview-mock';
+      return;
+    }
+    if (v === 'sheet') {
+      await Bank.ensureAll();
+      const items = Bank.itemsByYear(2020, {});
+      Session.start({ title: '答题卡预览', items: items });
+      await wait(250);
+      const b = document.querySelector('[data-tool="sheet"]');
+      if (b) b.click();
+      await wait(250);
+      document.title = 'preview-sheet';
+      return;
+    }
     await Bank.ensureAll();
     const items = Bank.itemsByYear(2020, {});
     const cluster = items.filter(function (i) { return i.qs.length === 3; })[0];
