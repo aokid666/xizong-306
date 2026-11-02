@@ -59,6 +59,10 @@
       console.warn('存储初始化失败，改用内存模式', e);
     }
     document.documentElement.style.setProperty('--fs', (Store.get('fontSize') || 17) + 'px');
+    const qsTheme = (location.search.match(/[?&]theme=(dark|light)/) || [])[1];
+    U.applyTheme(qsTheme || Store.get('theme') || (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'), true);
+    const tBtn = document.getElementById('btn-theme');
+    if (tBtn) tBtn.addEventListener('click', function () { U.toggleTheme(); });
 
     try {
       await Bank.init();
