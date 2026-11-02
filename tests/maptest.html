@@ -118,6 +118,22 @@
     U.closeModal();
   }
 
+  // 病例题专项：图按钮要能找到导图（地图是懒加载的）
+  Session.teardown(); await wait(60);
+  await Bank.ensure(['内科学']);
+  const cq = Bank.loaded['内科学'].filter(function (q) { return q.clus; })[0];
+  Session.start({ title: 'case-map', items: [Bank.itemOf(cq)] });
+  await wait(300);
+  const cCard = $('.card');
+  cCard.querySelector('[data-act="map"]').click();
+  await wait(700);
+  const hintTxt = $('#modal-body [data-mp-hint]') ? $('#modal-body [data-mp-hint]').textContent : '';
+  ok('case map dialog finds pages', /找到这一章对应的导图/.test(hintTxt), hintTxt);
+  const okBtn = $$('#modal-body .btn').filter(b => !b.disabled && /下方/.test(b.textContent))[0];
+  ok('map buttons enabled', !!okBtn, okBtn ? 'enabled' : 'disabled');
+  U.closeModal();
+  Session.teardown();
+
   lines.push(''); lines.push('JS errors: ' + (window.__errors.join(' | ') || 'none'));
   lines.push(fail ? 'FAILED ' + fail : 'ALL PASS');
   log();
