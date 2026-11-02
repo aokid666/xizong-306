@@ -1,0 +1,14 @@
+﻿<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><pre id="o">...</pre><script>
+const out=[];
+out.push('indexedDB: '+typeof indexedDB);
+try{ localStorage.setItem('t','1'); out.push('localStorage: ok'); }catch(e){ out.push('localStorage: '+e.name); }
+let req;
+try{ req = indexedDB.open('probe',1); }catch(e){ out.push('open throw: '+e.name+': '+e.message); }
+if(req){
+  req.onupgradeneeded=()=>{ req.result.createObjectStore('kv'); };
+  req.onsuccess=()=>{ const db=req.result; try{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').put('v','k'); tx.oncomplete=()=>{ out.push('idb write: ok'); document.getElementById('o').textContent=out.join('\n'); document.title='DONE'; }; tx.onerror=()=>{ out.push('idb tx error: '+tx.error); document.getElementById('o').textContent=out.join('\n'); }; }catch(e){ out.push('tx throw: '+e.name+': '+e.message); } };
+  req.onerror=()=>{ out.push('open error: '+(req.error&&req.error.name)); document.getElementById('o').textContent=out.join('\n'); document.title='DONE'; };
+  req.onblocked=()=>{ out.push('blocked'); };
+}
+setTimeout(()=>{ out.push('timeout-and-done'); document.getElementById('o').textContent=out.join('\n'); document.title='DONE'; }, 3000);
+</script></body></html>
