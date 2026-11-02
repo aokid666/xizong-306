@@ -208,7 +208,16 @@
           }
           return;
         }
-        if (kind === 'fav') { Store.toggleFav(item.qs[0].id); Card.refreshActs(card, item); U.toast(Store.isFav(item.qs[0].id) ? '已收藏' : '已取消收藏'); return; }
+        if (kind === 'fav') {
+          try {
+            const now = Store.toggleFav(item.qs[0].id);
+            Card.refreshActs(card, item);
+            U.toast(now ? '已收藏 ★（可到「收藏/错题」查看）' : '已取消收藏');
+          } catch (err) {
+            U.toast('收藏失败：' + (err && err.message || err), 3000);
+          }
+          return;
+        }
         if (kind === 'flag') { flagDialog(item.qs[0].id, function () { Card.refreshActs(card, item); }); return; }
         if (kind === 'note') { Card.openNote(card, subq ? subq.dataset.qid : item.qs[0].id); return; }
         if (kind === 'hw') { Card.hwToggle(card); return; }
