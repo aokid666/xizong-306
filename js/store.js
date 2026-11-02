@@ -243,6 +243,7 @@
     hw: {},         // qid -> {w,h,u,s:[[x,y,..]]}
     keys: {},       // qid -> {v:'AB', t:ts} 模拟题自行订正的正确答案
     imgDel: {},     // 图片删除墓碑 id -> ts（用于云端同步时同步删除）
+    papers: [],     // 自定义组题记录 [{id,name,ts,items:[key],filters}]
     session: null   // 断点续做
   };
 
@@ -367,6 +368,25 @@
     setHw(qid, obj) {
       if (!obj || !obj.s || !obj.s.length) delete Store.doc.hw[qid];
       else { obj.u = Date.now(); Store.doc.hw[qid] = obj; }
+      Store.save();
+    },
+
+    /* 组题记录 */
+    papers() { return Store.doc.papers || []; },
+    addPaper(p) {
+      const rec = { id: U.uid(), name: p.name || '未命名题单', ts: Date.now(), items: p.items || [], filters: p.filters || '' };
+      Store.doc.papers = Store.doc.papers || [];
+      Store.doc.papers.unshift(rec);
+      if (Store.doc.papers.length > 200) Store.doc.papers.length = 200;
+      Store.save();
+      return rec;
+    },
+    removePaper(id) {
+      Store.doc.papers = (Store.doc.papers || []).filter(function (x) { return x.id !== id; });
+      Store.save();
+    },
+    renamePaper(id, name) {
+      (Store.doc.papers || []).forEach(function (x) { if (x.id === id) x.name = name; });
       Store.save();
     },
 
