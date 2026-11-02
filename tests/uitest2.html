@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>uitest2</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>#log{font:12px/1.5 monospace;white-space:pre-wrap;padding:14px;background:#fafafa;border-bottom:1px solid #ddd}</style>
+</head>
+<body>
+<header class="topbar"><div class="topbar-in">
+  <a class="brand" href="#/home">西综真题</a>
+  <nav class="nav"><a href="#/years">按年份</a><a href="#/subjects">按科目</a><a href="#/build">组题</a><a href="#/mock">模拟题</a><a href="#/yicuo">易错</a><a href="#/lists">收藏/错题</a><a href="#/stats">统计</a></nav>
+  <div class="topbar-r"><input id="q-search" class="search" placeholder="搜题干"><button class="icon-btn" id="btn-sync">☁</button><button class="icon-btn" id="btn-settings">⚙</button></div>
+</div></header>
+<pre id="log">running…</pre>
+<main id="app" class="wrap"></main>
+<div id="toast" class="toast" hidden></div>
+<div id="drawer" class="drawer" hidden>
+  <div class="drawer-mask" data-close></div>
+  <aside class="drawer-panel"><header class="drawer-hd"><h2 id="drawer-title"></h2><button class="icon-btn" data-close>X</button></header><div id="drawer-body" class="drawer-bd"></div></aside>
+</div>
+<div id="modal" class="modal" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-panel"><header class="modal-hd"><h2 id="modal-title"></h2><button class="icon-btn" data-close>X</button></header><div id="modal-body" class="modal-bd"></div><footer id="modal-foot" class="modal-ft"></footer></div>
+</div>
+
+<script>window.__errors = []; window.onerror = function (m, s, l) { window.__errors.push(m + ' @' + (s || '').split('/').pop() + ':' + l); };</script>
+<script src="../data/meta.js"></script>
+<script src="../js/store.js"></script>
+<script src="../js/bank.js"></script>
+<script src="../js/card.js"></script>
+<script src="../js/session.js"></script>
+<script src="../js/views.js"></script>
+<script src="../js/app.js"></script>
+<script>
+(function () {
+  const lines = []; let fail = 0;
+  const log = function () { document.getElementById('log').textContent = lines.join('\n'); };
+  function ok(name, cond, extra) {
+    lines.push((cond ? '[PASS] ' : '[FAIL] ') + name + (extra != null ? '  — ' + extra : ''));
+    if (!cond) fail++; log();
+  }
+  const wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  function done() {
+    lines.push(''); lines.push('JS errors: ' + (window.__errors.length ? window.__errors.join(' | ') : 'none'));
+    lines.push(fail ? ('FAILED ' + fail) : 'ALL PASS');
+    log(); window.scrollTo(0, 0);
+    document.title = fail ? 'FAIL ' + fail : 'OK';
+  }
+  const $ = function (s) { return document.querySelector(s); };
+  const $$ = function (s) { return Array.prototype.slice.call(document.querySelectorAll(s)); };
+
+  (async function () {
+    await Store.init();
+    for (let i = 0; i < 120 && !$('.hero'); i++) await wait(50);
+    ok('booted', !!$('.hero'));
+
+    /* ---------- 1. 模拟题：套卷 ---------- */
+    location.hash = '#/mock'; await wait(400);
+    ok('mock sets listed', $$('[data-set]').length >= 10, $$('[data-set]').length + ' sets');
+    const setRow = $('[data-set]');
+    const setName = setRow.dataset.set;
+    ok('mock set has count', /\d+ 题/.test(setRow.textContent), setRow.textContent.trim().slice(0, 40));
+
+    // 直接挑一道单选、有答案的模拟题
+    const mSingle = Bank.mock.list.filter(function (q) { return q.ans && !q.multi; })[0];
+    ok('mock single question', !!mSingle, mSingle && (mSingle.set + ' ' + mSingle.label + ' ans=' + mSingle.ans));
+    Session.start({ title: 'mock test', items: [{ key: 'q:' + mSingle.id, qs: [mSingle], vignette: '', tails: [mSingle.stem], cid: '' }] });
+    await wait(200);
+    const mcard = $('.card');
+    ok('mock card', !!mcard && mcard._item.qs[0].mock === true);
+    ok('mock key button', !!mcard.querySelector('[data-act="key"]'));
+    ok('mock tag shows set', mcard.textContent.indexOf(mSingle.set) >= 0);
+
+    mcard.querySelector('[data-act="key"]').click(); await wait(150);
+    ok('key modal', !!$('#modal:not([hidden])'));
+    const picks = $$('#modal-body .pick');
+    ok('key picks', picks.length === 4, picks.length + '');
+    picks.forEach(function (b) { if (b.classList.contains('sel')) b.click(); });
+    picks[0].click();
+    await wait(30);
+    $$('#modal-foot .btn').filter(function (b) { return /保存/.test(b.textContent); })[0].click();
+    await wait(150);
+    ok('key saved', Store.key(mSingle.id) === 'A', 'key=' + Store.key(mSingle.id));
+
+    mcard.querySelector('.opt[data-k="A"]').click(); await wait(40);
+    mcard.querySelector('[data-act="submit"]').click(); await wait(100);
+    ok('mock verdict', !mcard.querySelector('.verdict').hidden);
+    ok('mock graded correct', mcard.querySelector('.verdict .vs').textContent.indexOf('正确') >= 0, mcard.querySelector('.verdict .vs').textContent);
+    Session.teardown(); await wait(60);
+
+    /* ---------- 2. B 型题成组 ---------- */
+    Store.set('bGroup', true);
+    await Bank.ensureAll();
+    const bq = Bank.loaded['生理学'].filter(function (q) { return q.t === 'B'; })[0];
+    ok('has B question', !!bq, bq && bq.label);
+    const yearItems = Bank.itemsByYear(bq.y, {});
+    const bItem = yearItems.filter(function (it) { return it.bGroup; })[0];
+    ok('B grouped item', !!bItem, bItem && (bItem.qs.length + ' 问共用备选'));
+    if (bItem) {
+      Session.start({ title: 'B test', items: [bItem] });
+      await wait(150);
+      const bc = $('.card');
+      ok('shared options rendered', !!bc.querySelector('.shared-opts'), bc.querySelectorAll('.shared-opts .opt').length + ' opts');
+      ok('picks rendered', bc.querySelectorAll('.pick').length >= 4 * bItem.qs.length, bc.querySelectorAll('.pick').length + ' picks');
+      const p1 = bc.querySelector('.subq .pick[data-k="A"]');
+      p1.click(); await wait(40);
+      ok('pick selected', p1.classList.contains('sel'));
+      bc.querySelector('[data-act="submit"]').click(); await wait(80);
+      ok('B verdict', !bc.querySelector('.verdict').hidden);
+      Session.teardown(); await wait(60);
+    }
+
+    /* ---------- 3. 答题卡分组 ---------- */
+    Session.start({ title: 'sheet', items: yearItems });
+    await wait(300);
+    lines.push('    yearItems=' + yearItems.length + ' sessionItems=' + Session.S.items.length +
+      ' types=' + Array.from(new Set(Session.S.items.map(function (it) { return it.qs[0].t; }))).join(','));
+    $('[data-tool="sheet"]').click(); await wait(150);
+    lines.push('    sheet buttons=' + $$('.sheet button').length + ' headings=' + $$('.sheet-hd').length);
+    ok('sheet groups', $$('.sheet-hd').length >= 2, $$('.sheet-hd').map(function (x) { return x.textContent.trim().replace(/\s+/g, ' '); }).join(' / '));
+    U.closeDrawer(); await wait(60);
+    Session.teardown(); await wait(60);
+
+    /* ---------- 4. 多选标签置顶 ---------- */
+    const xq = Bank.loaded['生理学'].filter(function (q) { return q.t === 'X'; })[0];
+    const xItem = Bank.itemsOf([xq])[0];
+    const xc = Card.build(xItem, 0, { sel: function () { return ''; }, res: function () { return null; }, showSubmit: function () { return true; } });
+    const firstTag = xc.querySelector('.card-tags .tag');
+    ok('multi tag first', firstTag && firstTag.classList.contains('multi') && firstTag.textContent === '多选', firstTag && firstTag.className);
+
+    /* ---------- 5. 隐藏题干标签 ---------- */
+    Store.set('hideMeta', true);
+    Session.start({ title: 'hide', items: [xItem] });
+    await wait(150);
+    const hc = $('.card');
+    const metas = $$('.metatag');
+    ok('metatags hidden before submit', metas.length > 0 && metas.every(function (m) { return m.hidden; }), metas.length + ' tags');
+    hc.querySelector('.opt').click(); await wait(40);
+    hc.querySelector('[data-act="submit"]').click(); await wait(80);
+    ok('metatags shown after submit', metas.every(function (m) { return !m.hidden; }));
+    Session.teardown(); await wait(60);
+    Store.set('hideMeta', false);
+
+    /* ---------- 6. 易错小结 ---------- */
+    location.hash = '#/yicuo'; await wait(600);
+    ok('yicuo rows', $$('[data-yc]').length === 5, $$('[data-yc]').length + '');
+    const ycRow = $$('[data-yc]').filter(function (r) { return r.dataset.yc === '生理学'; })[0];
+    ycRow.click();
+    for (let i = 0; i < 150 && !$('.session-bar'); i++) await wait(50);
+    ok('yicuo session', !!$('.session-bar'), $('[data-prog]') && $('[data-prog]').textContent);
+    ok('yicuo count', $('.session-bar [data-prog]').textContent.indexOf('/ 37') > 0, $('.session-bar [data-prog]').textContent);
+    Session.teardown(); await wait(60);
+
+    /* ---------- 7. 设置页新项 ---------- */
+    location.hash = '#/settings'; await wait(300);
+    ok('settings booleans', $$('[data-setbool]').length === 2);
+    ok('cloud inputs', $$('[data-cloud]').length === 4, $$('[data-cloud]').length + '');
+
+    done();
+  })().catch(function (e) { lines.push('[FATAL] ' + (e && e.stack || e)); done(); });
+})();
+</script>
+</body>
+</html>
