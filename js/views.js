@@ -46,10 +46,11 @@
       '<h1>西医综合真题刷题本</h1>' +
       '<p>1988—2026 年 306 真题，按年份、科目、章节、知识点分层整理。支持随机组题、病例题整体作答、手写批注、划线高亮、笔记、错题与标记。数据保存在本机。</p>' +
       '<div class="hero-stats">' +
-      '<div><b>' + U.fmtNum(total) + '</b><span>题目总数</span></div>' +
+      '<div><b>' + U.fmtNum(total) + '</b><span>真题总数</span></div>' +
       '<div><b>' + years[0].y + '–' + years[years.length - 1].y + '</b><span>年份跨度</span></div>' +
       '<div><b>' + U.fmtNum(st.done) + '</b><span>已作答</span></div>' +
       '<div><b>' + (st.done ? pct + '%' : '—') + '</b><span>正确率</span></div>' +
+      '<div><b>1,127</b><span>模拟题（12 套）</span></div>' +
       '</div></section>';
 
     if (snap && snap.items && snap.items.length) {
