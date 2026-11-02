@@ -861,9 +861,10 @@
   /* ================= 搜索 ================= */
   Views.search = function (term) {
     let html = crumb([{ t: '首页', href: '#/home' }, { t: '搜索：' + term }]);
-    html += '<div class="page-hd"><h1>搜索 “' + esc(term) + '”</h1><div class="sub" data-count>正在搜索…</div></div>';
-    html += '<div id="search-body"></div>';
+    html += '<div class="page-hd"><h1>搜索 “' + esc(term) + '”</h1><div class="sub" data-count>正在载入题库…</div></div>';
+    html += '<div id="search-body"><div class="empty">首次搜索需要下载全部题库（约 7MB），稍等一下就好；之后会走浏览器缓存。</div></div>';
     shell(html);
+    U.toast('正在载入题库，搜索马上出结果…', 4000);
     loadThen(Bank.subjectNames(), function () {
       const rows = Bank.search(term, 120);
       const box = document.getElementById('search-body');
