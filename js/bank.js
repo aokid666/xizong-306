@@ -103,6 +103,7 @@
 
     /* ---------- 病例题整体：把共用题干的若干小问合成一个 item ---------- */
     itemOf(q) {
+      if (q._mockItem) return q._mockItem;
       if (q._bItem) return q._bItem;
       if (!q.clus) return { key: 'q:' + q.id, qs: [q], vignette: '', tails: [q.stem], cid: '' };
       if (q._item) return q._item;
@@ -281,6 +282,15 @@
           return q;
         });
         list.forEach(function (q) { self.byId.set(q.id, q); });
+        (d.groups || []).forEach(function (g) {
+          const qs = g.qs.map(function (i) { return list[i]; }).filter(Boolean);
+          if (qs.length < 2) return;
+          const item = {
+            key: 'mg:' + qs[0].id, qs: qs, cid: '', bGroup: false,
+            vignette: g.v || '', tails: g.tails || qs.map(function (q) { return q.stem; })
+          };
+          qs.forEach(function (q) { q._mockItem = item; });
+        });
         self.mock = { meta: d, list: list };
         return self.mock;
       }).catch(function (e) {
@@ -300,9 +310,16 @@
       const set = (this.mock.meta.sets || []).filter(function (s) { return s.t === setName; })[0];
       if (!set) return [];
       const list = this.mock.list;
-      return set.qs.map(function (i) { return list[i]; })
-        .filter(Boolean)
-        .map(function (q) { return { key: 'q:' + q.id, qs: [q], vignette: '', tails: [q.stem], cid: '' }; });
+      const self = this, out = [], seen = {};
+      set.qs.forEach(function (i) {
+        const q = list[i];
+        if (!q) return;
+        const it = self.itemOf(q);
+        if (seen[it.key]) return;
+        seen[it.key] = 1;
+        out.push(it);
+      });
+      return out;
     },
 
     mockItemsByChapter(subj, chapter, sec) {
