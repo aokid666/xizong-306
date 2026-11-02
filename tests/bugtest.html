@@ -8,7 +8,7 @@
 <header class="topbar"><div class="topbar-in">
   <a class="brand" href="#/home">西综真题</a>
   <nav class="nav"><a href="#/years">按年份</a><a href="#/subjects">按科目</a><a href="#/build">组题</a><a href="#/mock">模拟题</a><a href="#/yicuo">易错</a><a href="#/lists">收藏/错题</a><a href="#/stats">统计</a></nav>
-  <div class="topbar-r"><input id="q-search" class="search" placeholder="搜题干"><button class="icon-btn" id="btn-sync">☁</button><button class="icon-btn" id="btn-settings">⚙</button></div>
+  <div class="topbar-r"><input id="q-search" class="search" placeholder="搜题干"><button class="icon-btn" id="btn-search">🔍</button><button class="icon-btn" id="btn-sync">☁</button><button class="icon-btn" id="btn-settings">⚙</button></div>
 </div></header>
 <pre id="log">running…</pre>
 <main id="app" class="wrap"></main>
@@ -65,6 +65,25 @@
   ok('search hash changed', location.hash.indexOf('#/search/') === 0, before + ' -> ' + location.hash);
   const res = document.querySelectorAll('#search-body .row').length;
   ok('search results', res > 0, res + ' rows');
+
+  // 搜索按钮 + 同一关键词重复搜索
+  location.hash = '#/home'; await wait(300);
+  const inp2 = document.getElementById('q-search');
+  inp2.value = '高血压';
+  document.getElementById('btn-search').click();
+  await wait(1500);
+  ok('search via button', location.hash.indexOf('#/search/') === 0 && document.querySelectorAll('#search-body .row').length > 0,
+     location.hash + ' / ' + document.querySelectorAll('#search-body .row').length + ' rows');
+  const firstHash = location.hash;
+  document.getElementById('btn-search').click();
+  await wait(800);
+  ok('repeat search re-renders', document.querySelectorAll('#search-body .row').length > 0, firstHash);
+
+  // 点击当前页导航能重新渲染
+  location.hash = '#/lists'; await wait(600);
+  const navA = document.querySelector('.nav a[href="#/lists"]');
+  navA.click(); await wait(500);
+  ok('nav re-render', !!document.getElementById('list-body'), document.getElementById('list-body') ? 'ok' : 'null');
   ok('search title', /搜索/.test((document.querySelector('.page-hd h1') || {}).textContent || ''),
      (document.querySelector('.page-hd h1') || {}).textContent);
 
