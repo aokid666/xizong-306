@@ -178,6 +178,7 @@
         '<button class="icon-btn" data-mvw="1.5" title="粗">⬤</button>' +
         '<button class="icon-btn" data-mvt2="undo" title="撤销">↶</button>' +
         '<button class="icon-btn" data-mvt2="clear" title="清空">✕</button>' +
+        '<button class="icon-btn" data-mvzoom="1" title="放大看">⤢</button>' +
         '<span style="flex:1"></span>' +
         '<label class="chk"><input type="checkbox" data-mvdraw checked> 手写</label>';
 
@@ -224,6 +225,16 @@
       if (w && api) {
         api.setWidth(parseFloat(w.dataset.mvw));
         host.querySelectorAll('[data-mvw]').forEach(function (x) { x.classList.toggle('on', x === w); });
+        return;
+      }
+      const z = e.target.closest('[data-mvzoom]');
+      if (z) {
+        const pz = pages[idx];
+        U.modal({
+          title: '第 ' + pz.n + ' 页 · ' + (pz.c || pz.s || ''),
+          body: '<div style="overflow:auto;max-height:78vh"><img src="data/maps/' + pz.img + '" style="width:' + (pz.w || 1500) + 'px;max-width:none;display:block"></div>',
+          buttons: [{ label: '关闭', cls: 'primary' }]
+        });
         return;
       }
       const t2 = e.target.closest('[data-mvt2]');
