@@ -393,10 +393,13 @@
     },
 
     data(card) {
+      const id = card._item.qs[0].id;
+      const stored = Store.hw(id);
+      // 外部写入（导入/预览）后同步缓存；正在书写时以内存中的笔迹为准
+      if (stored && card._hwD !== stored && !card._hwDrawing) card._hwD = stored;
       if (card._hwD) return card._hwD;
-      const item = card._item;
       const cv = this.canvas(card);
-      const d = Store.hw(item.qs[0].id) || { w: cv._lw, h: cv._lh, s: [] };
+      const d = stored || { w: cv._lw, h: cv._lh, s: [] };
       if (!d.s) d.s = [];
       card._hwD = d;
       return d;
@@ -450,6 +453,7 @@
           return;
         }
         drawing = true;
+        card._hwDrawing = true;
         cur = { p: [p[0], p[1]], c: cv._color || '#191919', w: cv._width || 3 };
         const d = HW.data(card);
         d.s.push(cur);
@@ -467,6 +471,7 @@
       const end = function () {
         if (!drawing) return;
         drawing = false;
+        card._hwDrawing = false;
         const d = HW.data(card);
         d.w = cv._lw; d.h = cv._lh;
         Store.setHw(card._item.qs[0].id, d);
