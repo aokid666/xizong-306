@@ -455,6 +455,13 @@ canvas.mv-hw{position:absolute;left:0;top:0;pointer-events:none;touch-action:non
 .lk-row .grow{flex:1;min-width:0}
 .lk-t{font-size:13.5px;font-family:var(--serif)}
 
+/* i(Pad)OS：长按只选中，不弹系统菜单，交给站内工具条 */
+.stem,.opt .t,.vignette,.exp .body,.nb-text{
+  -webkit-touch-callout:none;
+  -webkit-user-select:text;user-select:text;
+}
+.float-tools{touch-action:manipulation}
+
 /* ---------- 已做标签 ---------- */
 .tag.done.ok{border-color:#c3ddc9;background:var(--green-bg);color:var(--green)}
 .tag.done.no{border-color:#e4c4c4;background:var(--red-bg);color:var(--red)}
