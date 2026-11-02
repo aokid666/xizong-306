@@ -49,6 +49,13 @@
           const cid = key.slice(2);
           const qs = Bank.clusters[cid];
           if (qs && qs.length) { const it = Bank.itemOf(qs[0]); it.key = key; items.push(it); }
+        } else if (key.indexOf('b:') === 0) {
+          const q = Bank.q(key.slice(2));
+          if (q) {
+            const rebuilt = Bank.itemsOf([q])[0];
+            rebuilt.key = key;
+            items.push(rebuilt);
+          }
         } else {
           const q = Bank.q(key.slice(2));
           if (q) items.push(Bank.itemOf(q));
@@ -176,20 +183,12 @@
 
       const opt = t.closest('.opt');
       if (opt && !opt.classList.contains('locked') && content.contains(opt)) {
-        const qid = opt.closest('.subq').dataset.qid;
-        const k = opt.dataset.k;
-        const q = Bank.q(qid);
-        let cur = S.sel[qid] || '';
-        if (q && q.multi) {
-          cur = cur.indexOf(k) >= 0 ? cur.split('').filter(function (x) { return x !== k; }).join('') : (cur + k);
-        } else {
-          cur = (cur === k) ? '' : k;
-        }
-        if (cur) S.sel[qid] = cur; else delete S.sel[qid];
-        const card = opt.closest('.card');
-        reState(card);
-        refreshBar();
-        saveSnapshot();
+        toggleChoice(opt.closest('.subq'), opt.dataset.k, opt);
+        return;
+      }
+      const pick = t.closest('.pick');
+      if (pick && content.contains(pick)) {
+        toggleChoice(pick.closest('.subq'), pick.dataset.k, pick);
         return;
       }
 
@@ -213,6 +212,7 @@
         if (kind === 'flag') { flagDialog(item.qs[0].id, function () { Card.refreshActs(card, item); }); return; }
         if (kind === 'note') { Card.openNote(card, subq ? subq.dataset.qid : item.qs[0].id); return; }
         if (kind === 'hw') { Card.hwToggle(card); return; }
+        if (kind === 'key') { keyDialog(item); return; }
       }
 
       const tool = t.closest('[data-tool]');
@@ -281,7 +281,9 @@
     item.qs.forEach(function (q) {
       const chosen = S.sel[q.id];
       if (!chosen || S.res[q.id]) return;
-      const ok = sortLetters(chosen) === sortLetters(q.ans);
+      const truth = Bank.truth(q);
+      if (!truth) { U.toast('这题还没有正确答案，点「✎答」录入后再提交'); return; }
+      const ok = sortLetters(chosen) === sortLetters(truth);
       S.res[q.id] = { ok: ok, ans: chosen };
       Store.record(q.id, chosen, ok);
       any = true;
@@ -331,10 +333,65 @@
     const q = Bank.q(qid);
     if (!q) return;
     const html = '<div class="ans-line" style="margin-bottom:10px;font-size:13px;color:#555">' +
-      '正确答案 <b style="font-family:var(--mono)">' + esc(q.ans.split('').join(' ')) + '</b>' +
+      '正确答案 <b style="font-family:var(--mono)">' + esc(Bank.truth(q).split('').join(' ')) + '</b>' +
       '　你的答案 <b style="font-family:var(--mono)">' + esc((S.sel[qid] || '未作答').split('').join(' ')) + '</b></div>' +
       '<div style="font-family:var(--serif);line-height:1.9;font-size:14.5px">' + esc(q.exp || '（暂无解析）') + '</div>';
     U.openDrawer('解析 · ' + q.label, html);
+  }
+
+  function toggleChoice(subq, k, el) {
+    if (!subq) return;
+    const qid = subq.dataset.qid;
+    const q = Bank.q(qid);
+    let cur = S.sel[qid] || '';
+    if (q && q.multi) {
+      cur = cur.indexOf(k) >= 0 ? cur.split('').filter(function (x) { return x !== k; }).join('') : (cur + k);
+    } else {
+      cur = (cur === k) ? '' : k;
+    }
+    if (cur) S.sel[qid] = cur; else delete S.sel[qid];
+    reState(el.closest('.card'));
+    refreshBar();
+    saveSnapshot();
+  }
+
+  function keyDialog(item) {
+    const q = item.qs[0];
+    const cur = Bank.truth(q);
+    const picks = {};
+    cur.split('').forEach(function (c) { picks[c] = 1; });
+    const body = U.el('div');
+    body.innerHTML = '<p class="hint" style="margin-bottom:10px">' +
+      '这是模拟题：可以按课堂讲解录入/订正「正确答案」，之后判分以它为准。<br>' +
+      '题库自带的答案：<b style="font-family:var(--mono)">' + esc(q.ans || '（无）') + '</b></p>';
+    const row = U.el('div', { class: 'picks' });
+    q.opts.forEach(function (o) {
+      const b = U.el('button', { class: 'pick' + (picks[o.k] ? ' sel' : ''), title: o.v }, '<b>' + o.k + '</b>');
+      b.addEventListener('click', function () {
+        picks[o.k] = !picks[o.k];
+        b.classList.toggle('sel', !!picks[o.k]);
+      });
+      row.appendChild(b);
+    });
+    body.appendChild(row);
+    U.modal({
+      title: '订正正确答案 · ' + q.label, body: body, buttons: [
+        { label: '取消' },
+        {
+          label: '保存', cls: 'primary', onClick: function () {
+            const v = Object.keys(picks).filter(function (k) { return picks[k]; }).sort().join('');
+            Store.setKey(q.id, v);
+            if (S.res[q.id]) {
+              S.res[q.id].ok = sortLetters(S.sel[q.id] || '') === sortLetters(Bank.truth(q)) && !!S.sel[q.id];
+              Store.record(q.id, S.sel[q.id] || '', S.res[q.id].ok);
+            }
+            const card = U.$('.card[data-key="' + cssKey(item.key) + '"]', content);
+            if (card) reState(card);
+            U.toast(v ? '已保存正确答案 ' + v : '已清除订正');
+          }
+        }
+      ]
+    });
   }
 
   function flagDialog(qid, done) {
@@ -406,17 +463,29 @@
 
   function openSheet() {
     const body = U.el('div');
-    const grid = U.el('div', { class: 'sheet' });
-    S.items.forEach(function (it, i) {
-      const q0 = it.qs[0];
-      const sub = it.qs.every(function (q) { return S.res[q.id]; });
-      const ok = it.qs.every(function (q) { return S.res[q.id] && S.res[q.id].ok; });
-      const cls = 'btn-sheet' + (sub ? (ok ? ' ok' : ' no') : (S.sel[q0.id] ? ' done' : '')) + (i === S.idx ? ' cur' : '') + (Store.flag(q0.id) ? ' flag' : '');
-      const b = U.el('button', { class: cls, 'data-jump': i, title: q0.label }, String(i + 1));
-      grid.appendChild(b);
+    const groups = [
+      { t: 'A 型题', test: function (q) { return q.t === 'A' || q.t === 'M'; } },
+      { t: 'B 型题（共用备选）', test: function (q) { return q.t === 'B'; } },
+      { t: 'C 型题', test: function (q) { return q.t === 'C'; } },
+      { t: 'X 型题（多选）', test: function (q) { return q.t === 'X'; } }
+    ];
+    body.innerHTML = '<p class="hint" style="margin-bottom:14px">灰=已选未交　绿=对　红=错　右上角红点=已标记</p>';
+    groups.forEach(function (g) {
+      const rows = [];
+      S.items.forEach(function (it, i) { if (g.test(it.qs[0])) rows.push(i); });
+      if (!rows.length) return;
+      const h = U.el('div', { class: 'sheet-hd' }, g.t + '　<span class="hint">' + rows.length + ' 题</span>');
+      body.appendChild(h);
+      const grid = U.el('div', { class: 'sheet' });
+      rows.forEach(function (i) {
+        const it = S.items[i], q0 = it.qs[0];
+        const sub = it.qs.every(function (q) { return S.res[q.id]; });
+        const ok = it.qs.every(function (q) { return S.res[q.id] && S.res[q.id].ok; });
+        const cls = 'btn-sheet' + (sub ? (ok ? ' ok' : ' no') : (S.sel[q0.id] ? ' done' : '')) + (i === S.idx ? ' cur' : '') + (Store.flag(q0.id) ? ' flag' : '');
+        grid.appendChild(U.el('button', { class: cls, 'data-jump': i, title: q0.label }, String(i + 1)));
+      });
+      body.appendChild(grid);
     });
-    body.innerHTML = '<p class="hint" style="margin-bottom:12px">灰=已选未交　绿=对　红=错　右上角红点=已标记</p>';
-    body.appendChild(grid);
     U.openDrawer('答题卡 · ' + (S.idx + 1) + '/' + S.items.length, body);
   }
 
