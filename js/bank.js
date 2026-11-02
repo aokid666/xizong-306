@@ -66,6 +66,8 @@
             };
             q.multi = q.ans.length > 1;
             q.label = q.mid === 'N' ? (q.y + 'N' + q.n + (q.t || '')) : (q.y + q.mid + '-' + q.n + (q.t === 'A' ? '' : (q.t || '')));
+            if (q.v === 'C') q.label += '·临床';
+            else if (q.v === 'B') q.label += '·基础';
             arr.push(q);
             self.byId.set(q.id, q);
             if (q.clus) (self.clusters[q.clus] = self.clusters[q.clus] || []).push(q);
