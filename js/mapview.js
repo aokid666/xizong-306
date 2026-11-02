@@ -279,6 +279,11 @@
     /* 题目：选择展示方式 */
     openForQuestion(item, mode) {
       const q = item.qs[0];
+      if (!(window.XZ && window.XZ.maps)) {
+        U.toast('正在载入导图…', 3000);
+        Bank.ensureMaps().then(function () { MapUI.openForQuestion(item, mode); });
+        return;
+      }
       const pages = Bank.mapPagesForQuestion(q);
       if (!pages.length) { U.toast('这一章暂时没有对应导图'); return; }
       const title = (q.subj || '') + ' · 思维导图';
