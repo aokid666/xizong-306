@@ -188,6 +188,28 @@
     if (img.complete) fitNow(); else img.onload = fitNow;
   };
 
+  /* ---------- 主题 ---------- */
+  U.theme = function () {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  };
+  U.applyTheme = function (t, noSave) {
+    const dark = t === 'dark';
+    if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+    const invert = Store.get('imgInvert');
+    document.documentElement.classList.toggle('no-invert', invert === false);
+    try { localStorage.setItem('xz:theme', dark ? 'dark' : 'light'); } catch (e) { }
+    if (!noSave) { try { Store.set('theme', dark ? 'dark' : 'light'); } catch (e) { } }
+    const b = document.getElementById('btn-theme');
+    if (b) {
+      b.textContent = dark ? '☀' : '☾';
+      b.title = dark ? '切换到白天模式' : '切换到夜间模式';
+    }
+  };
+  U.toggleTheme = function () {
+    U.applyTheme(U.theme() === 'dark' ? 'light' : 'dark');
+  };
+
   U.modal = function (opt) {
     const m = document.getElementById('modal');
     if (!m) return null;
