@@ -419,7 +419,7 @@
     body.innerHTML = '<p class="hint" style="margin-bottom:12px">' +
       (pages.length
         ? ('找到这一章对应的导图 <b>' + pages.length + '</b> 页（' + esc(pages[0].c || pages[0].s || '') + '）')
-        : '这一章暂时没有对应导图') + '</p>';
+        : (Bank.mapSubjectKey(q.subj) ? '这一章暂时没有对应导图' : '人文精神没有配套的思维导图')) + '</p>';
     const row = U.el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' });
     const b1 = U.el('button', { class: 'btn' }, '侧边分屏（左题右图）');
     const b2 = U.el('button', { class: 'btn' }, '显示在题目下方');
