@@ -247,6 +247,15 @@
         if (kind === 'link') { linkDialog(item); return; }
       }
 
+      const fixKey = t.closest('[data-fixkey]');
+      if (fixKey) {
+        const ce = fixKey.closest('.card');
+        if (ce && ce._item) {
+          window.__keyDialog(ce._item);
+          setTimeout(function () { if (ce._item) Card.renderLinks(ce, ce._item.qs[0]); }, 400);
+        }
+        return;
+      }
       const redoOne = t.closest('[data-redo-one]');
       if (redoOne) {
         const cardEl = redoOne.closest('.card');
@@ -411,9 +420,11 @@
     const picks = {};
     cur.split('').forEach(function (c) { picks[c] = 1; });
     const body = U.el('div');
+    const overridden = !!Store.key(q.id);
     body.innerHTML = '<p class="hint" style="margin-bottom:10px">' +
-      '这是模拟题：可以按课堂讲解录入/订正「正确答案」，之后判分以它为准。<br>' +
-      '题库自带的答案：<b style="font-family:var(--mono)">' + esc(q.ans || '（无）') + '</b></p>';
+      '如果这道题的答案有问题，可以在这里订正「正确答案」，之后判分、错题本都以它为准。<br>' +
+      '题库自带答案：<b style="font-family:var(--mono)">' + esc(q.ans || '（无）') + '</b>' +
+      (overridden ? '　已订正为：<b style="font-family:var(--mono);color:var(--green)">' + esc(Store.key(q.id)) + '</b>' : '') + '</p>';
     const row = U.el('div', { class: 'picks' });
     q.opts.forEach(function (o) {
       const b = U.el('button', { class: 'pick' + (picks[o.k] ? ' sel' : ''), title: o.v }, '<b>' + o.k + '</b>');
@@ -557,6 +568,8 @@
       ]
     });
   }
+
+  window.__keyDialog = keyDialog;
 
   function flagDialog(qid, done) {
     const cur = Store.flag(qid);
