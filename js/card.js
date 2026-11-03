@@ -328,9 +328,12 @@
     if (!row) return;
     const ids = Store.linksOf(q0.id);
     const done = !!Store.prog(q0.id);
-    if (!ids.length && !done) { row.hidden = true; row.innerHTML = ''; return; }
+    if (!ids.length && !done && !Store.key(q0.id)) { row.hidden = true; row.innerHTML = ''; return; }
     row.hidden = false;
-    row.innerHTML = (done ? '<button class="link-chip redo-chip" data-redo-one="1">重做这题</button>' : '') +
+    const fixed = !!Store.key(q0.id);
+    row.innerHTML = '<button class="link-chip' + (fixed ? ' fix-chip' : '') + '" data-fixkey="1">' +
+        (fixed ? '答案已订正 · 改' : '矫正答案') + '</button>' +
+      (done ? '<button class="link-chip redo-chip" data-redo-one="1">重做这题</button>' : '') +
       (ids.length ? '<span class="hint">关联</span>' : '') + ids.map(function (id) {
       const q = Bank.q(id);
       if (!q) return '';
