@@ -42,7 +42,8 @@
       const hasHl = active.some(function (m) { return m.k === 'hl'; });
       const ids = active.map(function (m) { return m.i; }).join(' ');
       const notes = active.filter(function (m) { return m.n; }).map(function (m) { return m.n; });
-      out += '<mark class="' + (hasHl ? 'hl' : 'ul') + '" data-mid="' + ids + '"' +
+      const cl = (active.filter(function (m) { return m.c; })[0] || {}).c;
+      out += '<mark class="' + (hasHl ? 'hl' : 'ul') + (cl ? ' c' + cl : '') + '" data-mid="' + ids + '"' +
         (notes.length ? ' data-note="1" title="' + esc(notes.join(' / ')) + '"' : '') + '>' + esc(seg) + '</mark>';
       active.forEach(function (m) {
         if (m.n && m.e === b) out += '<sup class="mk" data-mid="' + m.i + '" title="' + esc(m.n) + '">※</sup>';
@@ -705,14 +706,41 @@
   let floatEl = null;
   function hideFloat() { if (floatEl) { floatEl.remove(); floatEl = null; } }
 
-  function showFloat(x, y, buttons) {
+  function showFloat(x, y, buttons, onColor, curColor) {
     hideFloat();
     const f = U.el('div', { class: 'float-tools' });
+    if (onColor) {
+      for (let i = 1; i <= 5; i++) {
+        const dot = U.el('span', { class: 'ft-color c' + i + (i === curColor ? ' on' : ''), 'data-c': String(i) });
+        dot.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
+        dot.addEventListener('touchstart', function (e) {
+          e.preventDefault(); e.stopPropagation();
+          onColor(i);
+          f.querySelectorAll('.ft-color').forEach(function (d) { d.classList.toggle('on', d.dataset.c === String(i)); });
+        }, { passive: false });
+        dot.addEventListener('click', function (e) {
+          e.preventDefault(); e.stopPropagation();
+          onColor(i);
+          f.querySelectorAll('.ft-color').forEach(function (d) { d.classList.toggle('on', d.dataset.c === String(i)); });
+        });
+        f.appendChild(dot);
+      }
+      f.appendChild(U.el('span', { class: 'ft-sep' }));
+    }
     buttons.forEach(function (b) {
       const btn = U.el('button', { text: b.label });
+      let fired = false;
       btn.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
-      btn.addEventListener('touchstart', function (e) { e.preventDefault(); e.stopPropagation(); }, { passive: false });
-      btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); b.fn(); });
+      btn.addEventListener('touchstart', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        fired = true;
+        b.fn();
+      }, { passive: false });
+      btn.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        if (fired) { fired = false; return; }
+        b.fn();
+      });
       f.appendChild(btn);
     });
     document.body.appendChild(f);
@@ -768,16 +796,17 @@
         const tx = range.toString();
         const rect = range.getBoundingClientRect();
 
-        const add = function (kind, note) {
-          Store.addMark(owner, { f: field, s: off[0], e: off[1], tx: tx, k: kind, n: note || '' });
+        const add = function (kind, note, color) {
+          Store.addMark(owner, { f: field, s: off[0], e: off[1], tx: tx, k: kind, n: note || '', c: color || 0 });
           applyField(fieldEl, owner, field);
           sel.removeAllRanges();
           hideFloat();
         };
 
+        let curColor = 1;
         showFloat(rect.left + rect.width / 2, rect.top, [
-          { label: '高亮', fn: function () { add('hl'); } },
-          { label: '划线', fn: function () { add('ul'); } },
+          { label: '高亮', fn: function () { add('hl', '', curColor); } },
+          { label: '划线', fn: function () { add('ul', '', curColor); } },
           {
             label: '批注', fn: function () {
               const body = U.el('div', {}, '<p class="hint" style="margin-bottom:8px">选中：' + esc(tx.slice(0, 80)) + '</p>');
@@ -791,7 +820,7 @@
               });
             }
           }
-        ]);
+        ], function (c) { curColor = c; }, curColor);
       }, 10);
     };
 
