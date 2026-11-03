@@ -271,7 +271,8 @@
           '<span class="meta">' + chQs.length + ' 题</span></summary>';
         html += '<div class="ch-actions">' +
           '<button class="btn sm" data-ch="' + ci + '" data-order="seq"' + (empty ? ' disabled' : '') + '>刷本章</button>' +
-          '<button class="btn sm" data-ch="' + ci + '" data-order="rand"' + (empty ? ' disabled' : '') + '>随机本章</button></div>';
+          '<button class="btn sm" data-ch="' + ci + '" data-order="rand"' + (empty ? ' disabled' : '') + '>随机本章</button>' +
+          '<button class="btn ghost sm" data-ch="' + ci + '" data-order="seq" data-redo="1"' + (empty ? ' disabled' : '') + '>重做本章</button></div>';
         ch.sec.forEach(function (sec, si) {
           const secQs = qsOf(ci, sec.t);
           const secEmpty = secQs.length === 0;
@@ -360,6 +361,10 @@
       if (!items.length) { U.toast('这个范围内没有题目'); return; }
       if ((chBtn.dataset.order || 'seq') === 'rand') Bank.shuffle(items);
       const label = name + ' · 第' + ch.z + '章 ' + ch.t + (secTitle ? ' · ' + secTitle : '') + (kp ? ' · ' + kp : '');
+      if (chBtn.dataset.redo) {
+        Session.start({ title: '重做 · ' + label, subtitle: items.length + ' 组', items: items, redo: true });
+        return;
+      }
       startItems(items, label, label.replace(/ · /g, ' / '));
     });
   }
