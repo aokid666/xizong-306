@@ -1,0 +1,33 @@
+name: migrate-lectures
+on: workflow_dispatch
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Extract lecture pages from history
+        run: |
+          set -e
+          mkdir -p /tmp/lec
+          SRC=$(git log --all --format=%H -- data/lec | head -1)
+          echo "source commit: $SRC"
+          git checkout $SRC -- data/lec || true
+          cp data/lec/*.webp /tmp/lec/ 2>/dev/null || true
+          echo "pages: $(ls /tmp/lec | wc -l)"
+          du -sh /tmp/lec
+      - name: Push to lecture repo
+        env:
+          TOKEN: ${{ secrets.LEC_TOKEN }}
+        run: |
+          set -e
+          cd /tmp/lec
+          git init -q
+          git config user.email bot@xizong.local
+          git config user.name bot
+          git checkout -q -b main
+          git add -A
+          git commit -qm "lecture pages (1600px)"
+          git remote add origin https://x-access-token:$TOKEN@github.com/aokid666/xizong-lec.git
+          git push -f origin main
