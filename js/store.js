@@ -398,7 +398,7 @@
     /* progress */
     record(qid, ans, ok) {
       const p = Store.doc.progress[qid] || { n: 0 };
-      p.a = ans; p.ok = ok ? 1 : 0; p.t = Date.now(); p.n = (p.n || 0) + 1;
+      p.a = ans; p.ok = ok ? 1 : 0; p.t = Date.now(); p.n = (p.n || 0) + 1; p.c = (p.c || 0) + (ok ? 1 : 0);
       Store.doc.progress[qid] = p;
       Store.save();
     },
