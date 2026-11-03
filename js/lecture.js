@@ -159,6 +159,7 @@
       cv.addEventListener('pointercancel', end);
 
       load();
+      cv.style.pointerEvents = 'none';           // 默认不接管触摸，先能正常滚动
       if (img.complete) redraw(); else img.onload = redraw;
       window.addEventListener('resize', redraw);
       hw = { setTool: function (t) { tool = t; }, undo: function () { strokes.pop(); save(); redraw(); }, clear: function () { strokes = []; save(); redraw(); } };
@@ -243,9 +244,21 @@
       if (h) {
         const act = h.dataset.lbHw;
         if (!host._hw) return;
-        if (act === 'undo') host._hw.undo();
-        else if (act === 'clear') host._hw.clear();
-        else host._hw.setTool(act);
+        const cv = host.querySelector('canvas.lec-hw');
+        if (act === 'undo') { host._hw.undo(); return; }
+        if (act === 'clear') { host._hw.clear(); return; }
+        // 再点同一个工具 = 关闭手写
+        const on = h.classList.contains('on');
+        host.querySelectorAll('[data-lb-hw]').forEach(function (x) { x.classList.remove('on'); });
+        if (on) {
+          if (cv) cv.style.pointerEvents = 'none';
+          U.toast('手写已关闭');
+          return;
+        }
+        h.classList.add('on');
+        if (cv) cv.style.pointerEvents = 'auto';
+        host._hw.setTool(act);
+        U.toast(act === 'eraser' ? '橡皮：点中笔迹即可擦除' : '手写已开启（再点一次关闭）');
         return;
       }
       const c = e.target.closest('[data-lb-crop]');
