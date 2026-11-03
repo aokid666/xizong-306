@@ -111,12 +111,28 @@
       html += '<div class="row" data-year="' + y.y + '">' +
         '<div class="grow"><div class="t">' + y.y + ' 年真题</div>' +
         '<div class="d">' + y.n + ' 题' + (p.done ? ' · 已做 ' + p.done + ' · 正确率 ' + U.pct(p.right, p.done) + '%' : '') + '</div>' +
-        '</div><span class="num">' + y.n + ' 题</span><span class="go">开始 →</span></div>';
+        '</div><span class="num">' + y.n + ' 题</span>' +
+        (p.done ? '<button class="btn ghost sm" data-year-redo="' + y.y + '">重做</button>' : '') +
+        '<span class="go">开始 →</span></div>';
     });
     html += '</div>';
     shell(html);
 
     app().addEventListener('click', function (e) {
+      const rdo = e.target.closest('[data-year-redo]');
+      if (rdo) {
+        const yy = +rdo.dataset.yearRedo;
+        loadThen(Bank.subjectNames(), function () {
+          const qs = [];
+          Bank.subjectNames().forEach(function (n) {
+            (Bank.loaded[n] || []).forEach(function (q) { if (q.y === yy && Store.prog(q.id)) qs.push(q); });
+          });
+          const items = Bank.itemsOf(qs);
+          if (!items.length) { U.toast('这一年还没有做过的题'); return; }
+          Session.start({ title: '重做 · ' + yy + ' 年', subtitle: items.length + ' 组已做', items: items, redo: true });
+        });
+        return;
+      }
       const row = e.target.closest('[data-year]');
       if (!row) return;
       pickYear(+row.dataset.year);
