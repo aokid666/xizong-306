@@ -70,12 +70,19 @@
     if (on) HIDDEN.add(qid); else HIDDEN.delete(qid);
   }
 
+  function doneTag(pr) {
+    const n = pr.n || 1;
+    const c = (pr.c == null) ? (pr.ok ? 1 : 0) : pr.c;
+    const pct = Math.round(c * 100 / Math.max(1, n));
+    return tagHTML((pr.ok ? '已做 · 对' : '已做 · 错') + ' · ' + n + '次' + c + '对 ' + pct + '%', 'done ' + (pr.ok ? 'ok' : 'no'));
+  }
+
   function cardHead(item, index) {
     const q0 = item.qs[0];
     const bits = [];
     if (q0.multi) bits.push(tagHTML('多选', 'multi'));
     const pr = Store.prog(q0.id);
-    if (pr) bits.push('<span class="done-slot">' + tagHTML(pr.ok ? '已做 · 对' : '已做 · 错', 'done ' + (pr.ok ? 'ok' : 'no')) + '</span>');
+    if (pr) bits.push('<span class="done-slot">' + doneTag(pr) + '</span>');
     else bits.push('<span class="done-slot"></span>');
     if (q0.mock) {
       bits.push(tagHTML(q0.set || '模拟题'));
@@ -100,6 +107,7 @@
       '<button class="icon-btn" data-act="note" title="笔记">✎</button>' +
       '<button class="icon-btn" data-act="hw" title="手写批注">✍</button>' +
       '<button class="icon-btn" data-act="map" title="这一章的思维导图">图</button>' +
+      '<button class="icon-btn" data-act="lecture" title="讲义（可滚动/翻页/手写/框选进笔记）">讲</button>' +
       '<button class="icon-btn" data-act="link" title="关联相似题（对照模式）">链</button>' +
       '</div>' +
       '<div class="link-row" hidden></div></div>';
@@ -274,8 +282,8 @@
     if (slot) {
       const r0 = ctx.res(qs[0].id);
       const p0 = Store.prog(qs[0].id);
-      if (r0) slot.innerHTML = tagHTML(r0.ok ? '已做 · 对' : '已做 · 错', 'done ' + (r0.ok ? 'ok' : 'no'));
-      else if (p0) slot.innerHTML = tagHTML(p0.ok ? '已做 · 对' : '已做 · 错', 'done ' + (p0.ok ? 'ok' : 'no'));
+      if (p0) slot.innerHTML = doneTag(p0);
+      else if (r0) slot.innerHTML = tagHTML(r0.ok ? '已做 · 对' : '已做 · 错', 'done ' + (r0.ok ? 'ok' : 'no'));
       else slot.innerHTML = '';
     }
 
