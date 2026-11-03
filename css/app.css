@@ -549,6 +549,13 @@ canvas.lec-hw{position:absolute;left:0;top:0;cursor:crosshair;touch-action:none}
 .lec-crop{position:absolute;border:2px dashed var(--ink);background:rgba(255,233,138,.28);display:none;pointer-events:none}
 html[data-theme="dark"] .lec-stage{background:#1b1a18}
 
+/* ---------- 重做按钮 ---------- */
+.btn.redo{border-color:#dfcfa8;background:#fdf8ec;color:#8a6a2a;font-weight:500}
+.btn.redo:hover{background:#faf0d8;border-color:#d2bd8c}
+.link-chip.redo-chip{border-color:#dfcfa8;background:#fdf8ec;color:#8a6a2a}
+html[data-theme="dark"] .btn.redo{background:#2b2519;border-color:#4a3f26;color:#e0c88a}
+html[data-theme="dark"] .btn.redo:hover{background:#34301f}
+
 /* ---------- 高亮/划线的多颜色 ---------- */
 mark.hl.c1{background:#ffe98a}
 mark.hl.c2{background:#c8ecc0}
