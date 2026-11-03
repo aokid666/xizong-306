@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>西综真题 · 刷题本</title>
 <meta name="description" content="西医综合 306 历年真题离线刷题：按年份 / 科目 / 章节 / 分层，随机组题，手写批注，笔记与错题本。">
-<link rel="stylesheet" href="css/app.css?v=20261104e">
+<link rel="stylesheet" href="css/app.css?v=20261104f">
 <script>
 /* 尽早应用主题，避免闪白 */
 try {
@@ -73,22 +73,33 @@ try {
   </div>
 </footer>
 
-<script src="data/meta.js?v=20261104e"></script>
-<script src="js/zip.js?v=20261104e"></script>
-<script src="js/store.js?v=20261104e"></script>
-<script src="js/bank.js?v=20261104e"></script>
-<script src="js/card.js?v=20261104e"></script>
-<script src="js/mapview.js?v=20261104e"></script>
-<script src="js/lecture.js?v=20261104e"></script>
-<script src="js/session.js?v=20261104e"></script>
-<script src="js/views.js?v=20261104e"></script>
-<script src="js/app.js?v=20261104e"></script>
+<script src="data/meta.js?v=20261104f"></script>
+<script src="js/zip.js?v=20261104f"></script>
+<script src="js/store.js?v=20261104f"></script>
+<script src="js/bank.js?v=20261104f"></script>
+<script src="js/card.js?v=20261104f"></script>
+<script src="js/mapview.js?v=20261104f"></script>
+<script src="js/lecture.js?v=20261104f"></script>
+<script src="js/session.js?v=20261104f"></script>
+<script src="js/views.js?v=20261104f"></script>
+<script src="js/app.js?v=20261104f"></script>
 <script>
-if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js').catch(function () { });
-  });
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function (rs) {
+    rs.forEach(function (r) { r.unregister(); });
+  }).catch(function () { });
 }
+</script>
+<script>
+setTimeout(function () {
+  var app = document.getElementById('app');
+  if (!app) return;
+  var txt = (app.textContent || '').trim();
+  if (txt.length < 10 || txt.indexOf('正在载入') >= 0) {
+    app.innerHTML = '<div class="empty" style="line-height:2">页面卡住了。<br>' +
+      '<button class="btn" onclick="location.hash=\'#/home\';location.reload()">回首页重试</button></div>';
+  }
+}, 5000);
 </script>
 </body>
 </html>
