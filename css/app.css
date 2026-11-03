@@ -534,6 +534,21 @@ canvas.mv-hw{position:absolute;left:0;top:0;pointer-events:none;touch-action:non
 .zoom-stage:active{cursor:grabbing}
 .zoom-img{max-width:none;max-height:none;transform-origin:center center;user-select:none;-webkit-user-drag:none}
 
+/* ---------- 讲义 ---------- */
+.lec-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.lec-bar .select,.lec-bar .input{padding:4px 8px;font-size:12.5px}
+.lec-tools{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.lec-stage{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:auto;max-height:calc(100vh - 260px)}
+.lec-stage.h{display:flex;gap:12px;overflow-x:auto}
+.lec-page-wrap{position:relative;display:inline-block;min-width:100%}
+.lec-page{display:block;width:100%;height:auto}
+canvas.lec-hw{position:absolute;left:0;top:0;cursor:crosshair;touch-action:none}
+.lec-item{min-width:60%;max-width:100%;padding:8px}
+.lec-item .lec-page{width:100%}
+.lec-cap{font-size:11px;color:var(--faint);text-align:center;padding-top:4px}
+.lec-crop{position:absolute;border:2px dashed var(--ink);background:rgba(255,233,138,.28);display:none;pointer-events:none}
+html[data-theme="dark"] .lec-stage{background:#1b1a18}
+
 /* ---------- 高亮/划线的多颜色 ---------- */
 mark.hl.c1{background:#ffe98a}
 mark.hl.c2{background:#c8ecc0}
