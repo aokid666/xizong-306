@@ -251,7 +251,7 @@
       if (redoOne) {
         const cardEl = redoOne.closest('.card');
         if (cardEl && cardEl._item) {
-          Session.start({ title: '重做 · 单题', subtitle: '', items: [cardEl._item], redo: true });
+          U.confirmRedo([cardEl._item], '这一题');
         }
         return;
       }
