@@ -210,6 +210,26 @@
     U.applyTheme(U.theme() === 'dark' ? 'light' : 'dark');
   };
 
+  U.confirmRedo = function (items, title, subtitle, onOK) {
+    if (!items || !items.length) { U.toast('没有可重做的题'); return; }
+    U.modal({
+      title: '重做确认',
+      body: '<p style="font-size:14px;line-height:1.8">即将重做 <b>' + items.length + '</b> 组题' +
+        (title ? '（' + U.esc(title) + '）' : '') + '。</p>' +
+        '<p class="hint" style="margin-top:10px;line-height:1.8">· 重做期间不显示原有笔记、手写、高亮；<br>' +
+        '· 不影响原来的正误记录，提交重做后才计入「做了几次」。</p>',
+      buttons: [
+        { label: '取消' },
+        {
+          label: '开始重做', cls: 'primary', onClick: function () {
+            if (onOK) { onOK(); return; }
+            Session.start({ title: '重做 · ' + (title || '练习'), subtitle: subtitle || '', items: items.slice(), redo: true });
+          }
+        }
+      ]
+    });
+  };
+
   U.modal = function (opt) {
     const m = document.getElementById('modal');
     if (!m) return null;
