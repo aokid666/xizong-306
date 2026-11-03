@@ -25,8 +25,10 @@
     });
   }
 
+  const LEC_BASE = 'https://aokid666.github.io/xizong-lec/';
   function pageImg(book, n) {
-    return BASE + 'data/' + book.img + ('0000' + n).slice(-4) + '.webp';
+    const f = book.img.split('/').pop() + ('0000' + n).slice(-4) + '.webp';
+    return LEC_BASE + f;
   }
 
   /* ---------------- 查看器 ---------------- */
