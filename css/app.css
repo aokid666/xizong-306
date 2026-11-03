@@ -549,6 +549,10 @@ canvas.lec-hw{position:absolute;left:0;top:0;cursor:crosshair;touch-action:none}
 .lec-crop{position:absolute;border:2px dashed var(--ink);background:rgba(255,233,138,.28);display:none;pointer-events:none}
 html[data-theme="dark"] .lec-stage{background:#1b1a18}
 
+/* ---------- 答案订正 ---------- */
+.link-chip.fix-chip{border-color:#bcd6c2;background:var(--green-bg);color:var(--green)}
+html[data-theme="dark"] .link-chip.fix-chip{background:#152519;border-color:#2d5138;color:#63c983}
+
 /* ---------- 收藏文件夹 ---------- */
 .fold-bar{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px}
 .fold-chip{font-size:12.5px;border:1px solid var(--line);border-radius:14px;padding:4px 12px;background:#fff;color:var(--ink-2)}
