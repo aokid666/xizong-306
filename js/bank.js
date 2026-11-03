@@ -150,7 +150,7 @@
     ensureMaps() {
       if (window.XZ && window.XZ.maps) return Promise.resolve(window.XZ.maps);
       if (this._mapP) return this._mapP;
-      this._mapP = this._loadScript(BASE + 'data/maps.js?v=20261103w')
+      this._mapP = this._loadScript(BASE + 'data/maps.js?v=20261103x')
         .then(function () { return window.XZ.maps || { pages: [], toc: [] }; });
       return this._mapP;
     },
