@@ -549,6 +549,14 @@ canvas.lec-hw{position:absolute;left:0;top:0;cursor:crosshair;touch-action:none}
 .lec-crop{position:absolute;border:2px dashed var(--ink);background:rgba(255,233,138,.28);display:none;pointer-events:none}
 html[data-theme="dark"] .lec-stage{background:#1b1a18}
 
+/* ---------- 卡片上的迷你按钮 ---------- */
+.icon-btn.mini{width:26px;height:26px;font-size:12.5px;border:1px solid var(--line);border-radius:6px;color:var(--muted);background:#fff}
+.icon-btn.mini:hover{color:var(--ink);border-color:#c8c4be}
+.icon-btn.mini.on-fix{background:var(--green-bg);border-color:#c3ddc9;color:var(--green)}
+.icon-btn.mini.redo-mini{color:#8a6a2a;border-color:#dfcfa8;background:#fdf8ec}
+html[data-theme="dark"] .icon-btn.mini{background:#1b1a18}
+html[data-theme="dark"] .icon-btn.mini.redo-mini{background:#2b2519;border-color:#4a3f26;color:#e0c88a}
+
 /* ---------- 答案订正 ---------- */
 .link-chip.fix-chip{border-color:#bcd6c2;background:var(--green-bg);color:var(--green)}
 html[data-theme="dark"] .link-chip.fix-chip{background:#152519;border-color:#2d5138;color:#63c983}
