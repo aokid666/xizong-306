@@ -330,7 +330,7 @@
     const done = !!Store.prog(q0.id);
     if (!ids.length && !done) { row.hidden = true; row.innerHTML = ''; return; }
     row.hidden = false;
-    row.innerHTML = (done ? '<button class="link-chip" data-redo-one="1">重做这题</button>' : '') +
+    row.innerHTML = (done ? '<button class="link-chip redo-chip" data-redo-one="1">重做这题</button>' : '') +
       (ids.length ? '<span class="hint">关联</span>' : '') + ids.map(function (id) {
       const q = Bank.q(id);
       if (!q) return '';
