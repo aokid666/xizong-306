@@ -35,6 +35,9 @@
         it.qs.forEach(function (q) { Card.markHidden(q.id, true); });
       });
     }
+    S.sel = {}; S.res = {}; S.idx = 0; S.done = false;
+
+    // 恢复上次的作答（必须在清空之后；重做模式除外）
     if (!opt.redo) {
       S.items.forEach(function (it) {
         it.qs.forEach(function (q) {
@@ -46,7 +49,6 @@
         });
       });
     }
-    S.sel = {}; S.res = {}; S.idx = 0; S.done = false;
     S.mode = opt.mode || Store.get('mode') || 'scroll';
     S.chunk = Math.max(1, Store.get('chunk') || 10);
     S.submitMode = Store.get('submitMode') || 'single';
@@ -241,6 +243,7 @@
         if (kind === 'hw') { Card.hwToggle(card); return; }
         if (kind === 'key') { keyDialog(item); return; }
         if (kind === 'map') { mapDialog(item); return; }
+        if (kind === 'lecture') { LectureUI.open(item); return; }
         if (kind === 'link') { linkDialog(item); return; }
       }
 
