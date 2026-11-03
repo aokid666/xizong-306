@@ -1,0 +1,1 @@
+window.XZ=window.XZ||{};window.XZ.lectures={"books":[{"id":"a","name":"重排版五科合集","pages":1763,"toc":[],"img":"lec/a-%04d.webp"},{"id":"b","name":"跟课版笔记合集","pages":1383,"toc":[],"img":"lec/b-%04d.webp"}],"w":950};
