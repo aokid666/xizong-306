@@ -28,6 +28,18 @@
     S.title = opt.title || '练习';
     S.subtitle = opt.subtitle || '';
     S.items = opt.items || [];
+    // 之前做过的题：恢复上次的选择、对错、解析（重做模式除外）
+    if (!opt.redo) {
+      S.items.forEach(function (it) {
+        it.qs.forEach(function (q) {
+          const pr = Store.prog(q.id);
+          if (pr && pr.a && !S.sel[q.id]) {
+            S.sel[q.id] = pr.a;
+            S.res[q.id] = { ok: !!pr.ok, pick: pr.a };
+          }
+        });
+      });
+    }
     S.sel = {}; S.res = {}; S.idx = 0; S.done = false;
     S.mode = opt.mode || Store.get('mode') || 'scroll';
     S.chunk = Math.max(1, Store.get('chunk') || 10);
