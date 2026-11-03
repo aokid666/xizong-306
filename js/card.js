@@ -327,9 +327,11 @@
     const row = card.querySelector('.link-row');
     if (!row) return;
     const ids = Store.linksOf(q0.id);
-    if (!ids.length) { row.hidden = true; row.innerHTML = ''; return; }
+    const done = !!Store.prog(q0.id);
+    if (!ids.length && !done) { row.hidden = true; row.innerHTML = ''; return; }
     row.hidden = false;
-    row.innerHTML = '<span class="hint">关联</span>' + ids.map(function (id) {
+    row.innerHTML = (done ? '<button class="link-chip" data-redo-one="1">重做这题</button>' : '') +
+      (ids.length ? '<span class="hint">关联</span>' : '') + ids.map(function (id) {
       const q = Bank.q(id);
       if (!q) return '';
       const lab = q.mock ? ('模拟·' + (q.set || '') + ' 第' + q.n + '题') : q.label;
