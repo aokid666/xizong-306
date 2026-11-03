@@ -1,12 +1,11 @@
-name: migrate-lectures
+﻿name: migrate-lectures
 on: workflow_dispatch
 jobs:
   migrate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
       - name: Extract lecture pages from history
         run: |
           set -e
@@ -16,8 +15,7 @@ jobs:
           git checkout $SRC -- data/lec || true
           cp data/lec/*.webp /tmp/lec/ 2>/dev/null || true
           echo "pages: $(ls /tmp/lec | wc -l)"
-          du -sh /tmp/lec
-      - name: Push to lecture repo
+      - name: Push to lecture repo in batches
         env:
           TOKEN: ${{ secrets.LEC_TOKEN }}
         run: |
@@ -26,8 +24,20 @@ jobs:
           git init -q
           git config user.email bot@xizong.local
           git config user.name bot
+          git config http.postBuffer 524288000
           git checkout -q -b main
-          git add -A
-          git commit -qm "lecture pages (1600px)"
           git remote add origin https://x-access-token:$TOKEN@github.com/aokid666/xizong-lec.git
-          git push -f origin main
+          i=0
+          for f in *.webp; do
+            git add "$f"
+            i=$((i+1))
+            if [ $((i % 350)) -eq 0 ]; then
+              git commit -qm "batch $i"
+              git push -q origin main || { echo "push retry at $i"; sleep 5; git push -q origin main; }
+              echo "pushed $i"
+            fi
+          done
+          git add -A
+          git commit -qm "batch final" || true
+          git push -q origin main || { sleep 5; git push -q origin main; }
+          echo "done: $i files"
