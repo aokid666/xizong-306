@@ -54,14 +54,21 @@
 
   function rawOf(el) { return el ? (el.getAttribute('data-raw') || '') : ''; }
 
+  const HIDDEN = new Set();     // 重做中、尚未提交的题：隐藏原有笔记/字迹/高亮
+
   function applyField(el, owner, field) {
     if (!el) return;
     const text = rawOf(el);
-    el.innerHTML = markedHTML(text, Store.marks(owner).filter(function (m) { return m.f === field; }));
+    const marks = HIDDEN.has(owner) ? [] : Store.marks(owner).filter(function (m) { return m.f === field; });
+    el.innerHTML = markedHTML(text, marks);
   }
 
   /* ---------------- 卡片构建 ---------------- */
   function tagHTML(t, cls) { return '<span class="tag ' + (cls || '') + '">' + esc(t) + '</span>'; }
+
+  function markHidden(qid, on) {
+    if (on) HIDDEN.add(qid); else HIDDEN.delete(qid);
+  }
 
   function cardHead(item, index) {
     const q0 = item.qs[0];
@@ -324,6 +331,10 @@
 
   /* ---------------- 笔记面板：文字 / 图片 段落，可自由排序 ---------------- */
   function openNote(card, qid, ctx) {
+    if (HIDDEN.has(qid)) {
+      U.toast('重做提交后才能查看原有笔记');
+      return;
+    }
     const subq = card.querySelector('.subq[data-qid="' + qid + '"]') || card;
     let wrap = subq.querySelector('.note-wrap');
     if (!wrap) {
@@ -485,6 +496,12 @@
     init(card) {
       const cv = this.canvas(card);
       if (!cv) return;
+      const q0 = card._item && card._item.qs[0];
+      if (q0 && HIDDEN.has(q0.id)) {
+        cv._locked = true;
+        const hint = U.el('div', { class: 'hw-locked-hint' }, '重做中：提交后显示原有手写');
+        card.querySelector('.card-bd').appendChild(hint);
+      }
       this.resize(card, true);
       this.bind(card);
       const ro = window.ResizeObserver ? new ResizeObserver(U.debounce(function () { HW.resize(card); }, 60)) : null;
@@ -510,6 +527,7 @@
 
     data(card) {
       const id = card._item.qs[0].id;
+      if (HIDDEN.has(id)) return { w: 1, h: 1, s: [] };
       const stored = Store.hw(id);
       // 外部写入（导入/预览）后同步缓存；正在书写时以内存中的笔迹为准
       if (stored && card._hwD !== stored && !card._hwDrawing) card._hwD = stored;
@@ -548,6 +566,7 @@
 
     redraw(card) {
       const cv = this.canvas(card);
+      if (cv._locked) { const c2 = cv.getContext('2d'); c2.clearRect(0, 0, cv.width, cv.height); return; }
       const ctx = cv.getContext('2d');
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -586,6 +605,7 @@
       };
 
       cv.addEventListener('pointerdown', function (e) {
+        if (cv._locked) return;
         if (!card.classList.contains('hw-on')) return;
         e.preventDefault();
         try { cv.setPointerCapture(e.pointerId); } catch (err) { }
@@ -981,6 +1001,20 @@
     applyState: applyState,
     refreshActs: refreshActs,
     openNote: openNote,
+    markHidden: markHidden,
+    isHidden: function (qid) { return HIDDEN.has(qid); },
+    reveal: function (card, qid) {
+      HIDDEN.delete(qid);
+      card.querySelectorAll('[data-field]').forEach(function (el) {
+        const owner = el.dataset.owner || (el.closest('.subq') ? el.closest('.subq').dataset.qid : (card._item ? card._item.qs[0].id : qid));
+        applyField(el, owner, el.dataset.field);
+      });
+      const cv = card.querySelector('canvas.hw-layer');
+      if (cv) { cv._locked = false; HW.redraw(card); }
+      const hint = card.querySelector('.hw-locked-hint');
+      if (hint) hint.remove();
+      refreshActs(card, card._item);
+    },
     renderLinks: renderLinks,
     attach(root) {
       attachSelection(root);
