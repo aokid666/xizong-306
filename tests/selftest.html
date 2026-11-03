@@ -154,7 +154,7 @@ window.onerror = function (m, s, l, c, e) { window.__errors.push(m + ' @' + (s |
     location.hash = '#/stats'; await wait(500);
     ok('stats view', document.querySelectorAll('.stat').length >= 6, document.querySelectorAll('.stat').length + '');
     location.hash = '#/settings'; await wait(150);
-    ok('settings view', document.querySelectorAll('[data-setseg]').length === 3);
+    ok('settings view', document.querySelectorAll('[data-setseg]').length >= 4);
     location.hash = '#/lists'; await wait(500);
     ok('lists view', !!document.getElementById('list-body'));
 
