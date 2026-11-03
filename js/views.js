@@ -250,7 +250,10 @@
     const s0 = Bank.subjectMeta(name);
     if (!s0) { location.hash = '#/subjects'; return; }
     shell('<div class="empty">正在载入 ' + esc(name) + ' …</div>');
-    Bank.ensure([name]).then(function () { renderTree(); }).catch(function (e) {
+    Bank.ensure([name]).then(function () {
+      if (location.hash.indexOf('#/subject/') !== 0) return;
+      renderTree();
+    }).catch(function (e) {
       shell('<div class="empty">载入失败：' + esc(e.message) + '</div>');
     });
 
