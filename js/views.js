@@ -966,54 +966,36 @@
 
   /* ================= 答案订正记录 ================= */
   Views.keys = function () {
-    shell('<div class="empty">正在载入…</div>');
-    Bank.ensure(Bank.subjectNames()).then(function () {
-      const map = Store.doc.keys || {};
-      const ids = Object.keys(map).sort(function (a, b) { return (map[b].t || 0) - (map[a].t || 0); });
-      let html = crumb([{ t: '首页', href: '#/home' }, { t: '答案订正记录' }]);
-      html += '<div class="page-hd"><h1>答案订正记录</h1><div class="sub">' +
-        '这里是你手动改过答案的题，共 ' + ids.length + ' 道。订正后判分、错题本、统计都按新答案算。</div></div>';
-      if (!ids.length) {
-        html += '<div class="empty">还没有订正过题目。做题时点卡片上的「矫正答案」即可。</div>';
-        shell(html);
-        return;
-      }
-      html += '<div class="list">';
-      ids.forEach(function (id) {
-        const q = Bank.q(id);
-        if (!q) return;
-        const k = map[id];
-        html += '<div class="row" data-krow="' + esc(id) + '"><div class="grow">' +
-          '<div class="t">' + esc(q.stem.slice(0, 64)) + (q.stem.length > 64 ? '…' : '') + '</div>' +
-          '<div class="d">' + esc(q.label) + ' · ' + esc(q.subj) +
-          ' · 原答案 <b style="font-family:var(--mono)">' + esc(q.ans || '无') + '</b>' +
-          ' → 订正为 <b style="font-family:var(--mono);color:var(--green)">' + esc(k.v) + '</b>' +
-          (k.t ? ' · ' + U.fmtTime(k.t) : '') + '</div></div>' +
-          '<button class="btn ghost sm" data-krestore="' + esc(id) + '">恢复原答案</button>' +
-          '<span class="go">→</span></div>';
-      });
-      html += '</div>';
+    const map = Store.doc.keys || {};
+    const ids = Object.keys(map).sort(function (a, b) { return (map[b].t || 0) - (map[a].t || 0); });
+    let html = crumb([{ t: '首页', href: '#/home' }, { t: '答案订正记录' }]);
+    html += '<div class="page-hd"><h1>答案订正记录</h1><div class="sub">' +
+      '这里是你手动改过答案的题，共 ' + ids.length + ' 道。订正后判分、错题本、统计都按新答案算。</div></div>';
+    if (!ids.length) {
+      html += '<div class="empty">还没有订正过题目。做题时点卡片上的「矫正答案」即可。</div>';
       shell(html);
-
-      app().addEventListener('click', function (e) {
-        const rs = e.target.closest('[data-krestore]');
-        if (rs) {
-          Store.setKey(rs.dataset.krestore, '');
-          Views.keys();
-          U.toast('已恢复题库原答案');
-          return;
-        }
-        const row = e.target.closest('[data-krow]');
-        if (row) {
-          const q = Bank.q(row.dataset.krow);
-          if (q) U.modal({
-            title: q.label + ' · ' + q.subj,
-            body: '<div style="font-family:var(--serif);line-height:1.8;font-size:14.5px">' + esc(q.stem) + '</div>' +
-              (q.exp ? '<div class="exp" style="margin-top:10px"><div class="body">' + esc(q.exp) + '</div></div>' : ''),
-            buttons: [{ label: '关闭', cls: 'primary' }]
-          });
-        }
-      });
+      return;
+    }
+    html += '<div class="list">';
+    ids.forEach(function (id) {
+      const k = map[id] || {};
+      const label = k.label || id;
+      html += '<div class="row"><div class="grow">' +
+        '<div class="t">' + esc(k.stem || '（早期订正记录，无题干快照）') + '</div>' +
+        '<div class="d">' + esc(label) + (k.subj ? ' · ' + esc(k.subj) : '') +
+        ' · 原答案 <b style="font-family:var(--mono)">' + esc(k.ans || '无') + '</b>' +
+        ' → 订正为 <b style="font-family:var(--mono);color:var(--green)">' + esc(k.v) + '</b>' +
+        (k.t ? ' · ' + U.fmtTime(k.t) : '') + '</div></div>' +
+        '<button class="btn ghost sm" data-krestore="' + esc(id) + '">恢复原答案</button></div>';
+    });
+    html += '</div>';
+    shell(html);
+    app().addEventListener('click', function (e) {
+      const rs = e.target.closest('[data-krestore]');
+      if (!rs) return;
+      Store.setKey(rs.dataset.krestore, '');
+      Views.keys();
+      U.toast('已恢复题库原答案');
     });
   };
 
