@@ -534,6 +534,28 @@ canvas.mv-hw{position:absolute;left:0;top:0;pointer-events:none;touch-action:non
 .zoom-stage:active{cursor:grabbing}
 .zoom-img{max-width:none;max-height:none;transform-origin:center center;user-select:none;-webkit-user-drag:none}
 
+/* ---------- 高亮/划线的多颜色 ---------- */
+mark.hl.c1{background:#ffe98a}
+mark.hl.c2{background:#c8ecc0}
+mark.hl.c3{background:#cfe4fb}
+mark.hl.c4{background:#fcd9c0}
+mark.hl.c5{background:#e8d6f7}
+mark.ul.c1{text-decoration-color:#d8b400}
+mark.ul.c2{text-decoration-color:#4aa96c}
+mark.ul.c3{text-decoration-color:#4b7bd4}
+mark.ul.c4{text-decoration-color:#e0762c}
+mark.ul.c5{text-decoration-color:#a05fd0}
+html[data-theme="dark"] mark.hl.c1{background:#6b5a1c;color:#f4f0e8}
+html[data-theme="dark"] mark.hl.c2{background:#2b5228;color:#eaf4e6}
+html[data-theme="dark"] mark.hl.c3{background:#22384f;color:#e6eefb}
+html[data-theme="dark"] mark.hl.c4{background:#4d3320;color:#f7ece2}
+html[data-theme="dark"] mark.hl.c5{background:#3d2c4a;color:#f1e9f7}
+.ft-color{width:16px;height:16px;border-radius:50%;display:inline-block;margin:0 3px;border:1px solid rgba(0,0,0,.15);cursor:pointer}
+.ft-color.on{outline:2px solid var(--ink);outline-offset:1px}
+.ft-color.c1{background:#ffe98a}.ft-color.c2{background:#c8ecc0}.ft-color.c3{background:#cfe4fb}
+.ft-color.c4{background:#fcd9c0}.ft-color.c5{background:#e8d6f7}
+.ft-sep{width:1px;height:16px;background:var(--line);margin:0 4px;display:inline-block}
+
 /* ---------- 已做标签 ---------- */
 .tag.done.ok{border-color:#c3ddc9;background:var(--green-bg);color:var(--green)}
 .tag.done.no{border-color:#e4c4c4;background:var(--red-bg);color:var(--red)}
