@@ -18,6 +18,25 @@
     }).join('') + '</div>';
   }
 
+  function redoConfirm(items, title, subtitle) {
+    if (!items || !items.length) { U.toast('没有可重做的题'); return; }
+    U.modal({
+      title: '重做确认',
+      body: '<p style="font-size:14px;line-height:1.8">即将重做 <b>' + items.length + '</b> 组题' +
+        (title ? '（' + esc(title) + '）' : '') + '。</p>' +
+        '<p class="hint" style="margin-top:10px;line-height:1.8">· 重做期间不显示原有笔记、手写、高亮；<br>' +
+        '· 不影响原来的正误记录，提交重做后才计入「做了几次」。</p>',
+      buttons: [
+        { label: '取消' },
+        {
+          label: '开始重做', cls: 'primary', onClick: function () {
+            Session.start({ title: '重做 · ' + (title || '练习'), subtitle: subtitle || '', items: items.slice(), redo: true });
+          }
+        }
+      ]
+    });
+  }
+
   function startItems(items, title, subtitle) {
     if (!items || !items.length) { U.toast('没有符合条件的题目'); return; }
     Session.start({ title: title, subtitle: subtitle, items: items });
@@ -129,7 +148,7 @@
           });
           const items = Bank.itemsOf(qs);
           if (!items.length) { U.toast('这一年还没有做过的题'); return; }
-          Session.start({ title: '重做 · ' + yy + ' 年', subtitle: items.length + ' 组已做', items: items, redo: true });
+          redoConfirm(items, yy + ' 年已做题', items.length + ' 组');
         });
         return;
       }
@@ -378,7 +397,7 @@
       if ((chBtn.dataset.order || 'seq') === 'rand') Bank.shuffle(items);
       const label = name + ' · 第' + ch.z + '章 ' + ch.t + (secTitle ? ' · ' + secTitle : '') + (kp ? ' · ' + kp : '');
       if (chBtn.dataset.redo) {
-        Session.start({ title: '重做 · ' + label, subtitle: items.length + ' 组', items: items, redo: true });
+        redoConfirm(items, label, items.length + ' 组');
         return;
       }
       startItems(items, label, label.replace(/ · /g, ' / '));
@@ -533,6 +552,16 @@
         });
         return;
       }
+      const predo = e.target.closest('[data-predo]');
+      if (predo) {
+        const pp = Store.papers().filter(function (x) { return x.id === predo.dataset.predo; })[0];
+        if (!pp) return;
+        loadThen(Bank.subjectNames(), function () {
+          const its = (pp.items || []).map(paperItem).filter(Boolean);
+          redoConfirm(its, pp.name, its.length + ' 组');
+        });
+        return;
+      }
       const pdl = e.target.closest('[data-pdel]');
       if (pdl) {
         const p = Store.papers().filter(function (x) { return x.id === pdl.dataset.pdel; })[0];
@@ -620,6 +649,7 @@
         '<div class="bar" style="margin-top:6px"><i style="width:' + U.pct(done, total || 1) + '%"></i></div></div>' +
         '<button class="btn sm" data-pgo="' + p.id + '">' + (done ? '继续' : '开始') + '</button>' +
         '<button class="btn ghost sm" data-pname="' + p.id + '">重命名</button>' +
+        '<button class="btn redo sm" data-predo="' + p.id + '">重做</button>' +
         '<button class="btn ghost sm" data-pdel="' + p.id + '">删除</button></div>';
     });
     html += '</div>';
@@ -700,13 +730,10 @@
       box.onclick = function (ev) {
         const rdo = ev.target.closest('[data-redo-list]');
         if (!rdo || !box._items || !box._items.length) return;
-        Session.start({
-          title: '重做 · ' + (rdo.dataset.redoList === 'wrong' ? '错题' : '收藏'),
-          subtitle: box._items.length + ' 组', items: box._items.slice(), redo: true
-        });
+        redoConfirm(box._items, rdo.dataset.redoList === 'wrong' ? '错题' : '收藏', box._items.length + ' 组');
       };
       box.innerHTML = (items.length
-          ? '<div class="list-tools" style="margin-bottom:10px"><button class="btn sm" data-redo-list="' + tab + '">重做这 ' + items.length + ' 组</button>' +
+          ? '<div class="list-tools" style="margin-bottom:10px"><button class="btn redo sm" data-redo-list="' + tab + '">重做这 ' + items.length + ' 组</button>' +
             '<span class="hint">重做期间不显示原有笔记/手写/高亮，提交后才显示，也不影响原来的正误记录</span></div>'
           : '') +
         '<div class="list result-list">' + items.map(function (it, i) {
