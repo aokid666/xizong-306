@@ -675,7 +675,20 @@
         box.innerHTML = '<div class="empty">这里还是空的。' + (tab === 'fav' ? '做题时点 ☆ 收藏。' : tab === 'wrong' ? '做错的题会自动出现在这里。' : tab === 'flag' ? '点 ⚑ 给题目打标记。' : '') + '</div>';
         return;
       }
-      box.innerHTML = '<div class="list result-list">' + items.map(function (it, i) {
+      box._items = items;
+      box.onclick = function (ev) {
+        const rdo = ev.target.closest('[data-redo-list]');
+        if (!rdo || !box._items || !box._items.length) return;
+        Session.start({
+          title: '重做 · ' + (rdo.dataset.redoList === 'wrong' ? '错题' : '收藏'),
+          subtitle: box._items.length + ' 组', items: box._items.slice(), redo: true
+        });
+      };
+      box.innerHTML = (items.length
+          ? '<div class="list-tools" style="margin-bottom:10px"><button class="btn sm" data-redo-list="' + tab + '">重做这 ' + items.length + ' 组</button>' +
+            '<span class="hint">重做期间不显示原有笔记/手写/高亮，提交后才显示，也不影响原来的正误记录</span></div>'
+          : '') +
+        '<div class="list result-list">' + items.map(function (it, i) {
         const q = it.qs[0];
         const chap = q.mock ? null : Bank.chapterMeta(q.subj, q.ci);
         const fl = Store.flag(q.id);
