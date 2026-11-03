@@ -967,7 +967,7 @@
   /* ================= 答案订正记录 ================= */
   Views.keys = function () {
     shell('<div class="empty">正在载入…</div>');
-    loadThen(Bank.subjectNames(), function () {
+    Bank.ensure(Bank.subjectNames()).then(function () {
       const map = Store.doc.keys || {};
       const ids = Object.keys(map).sort(function (a, b) { return (map[b].t || 0) - (map[a].t || 0); });
       let html = crumb([{ t: '首页', href: '#/home' }, { t: '答案订正记录' }]);
