@@ -562,6 +562,32 @@
       Store.save();
     },
 
+    /* 收藏文件夹 */
+    folders() { return Store.doc.folders || []; },
+    addFolder(name) {
+      Store.doc.folders = Store.doc.folders || [];
+      const f = { id: U.uid(), name: name || '新文件夹', ts: Date.now() };
+      Store.doc.folders.push(f);
+      Store.save();
+      return f;
+    },
+    renameFolder(id, name) {
+      (Store.doc.folders || []).forEach(function (f) { if (f.id === id) f.name = name; });
+      Store.save();
+    },
+    delFolder(id) {
+      Store.doc.folders = (Store.doc.folders || []).filter(function (f) { return f.id !== id; });
+      const m = Store.doc.folderOf || {};
+      Object.keys(m).forEach(function (q) { if (m[q] === id) delete m[q]; });
+      Store.save();
+    },
+    folderOf(qid) { return (Store.doc.folderOf || {})[qid] || ''; },
+    setFolder(qid, id) {
+      Store.doc.folderOf = Store.doc.folderOf || {};
+      if (id) Store.doc.folderOf[qid] = id; else delete Store.doc.folderOf[qid];
+      Store.save();
+    },
+
     /* 题目互相关联（对照模式，双向） */
     linksOf(qid) { return (Store.doc.links && Store.doc.links[qid]) || []; },
     linkAll() {
