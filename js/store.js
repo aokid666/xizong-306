@@ -636,9 +636,11 @@
 
     /* 模拟题：自行订正的正确答案 */
     key(qid) { const k = Store.doc.keys[qid]; return k ? k.v : ''; },
-    setKey(qid, v) {
-      if (!v) delete Store.doc.keys[qid];
-      else Store.doc.keys[qid] = { v: v, t: Date.now() };
+    setKey(qid, v, extra) {
+      Store.doc.keys = Store.doc.keys || {};
+      if (!v) { delete Store.doc.keys[qid]; Store.save(); return; }
+      const old = Store.doc.keys[qid] || {};
+      Store.doc.keys[qid] = Object.assign({ v: v, t: Date.now() }, old, extra || {});
       Store.save();
     },
 
