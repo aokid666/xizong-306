@@ -247,6 +247,15 @@
         if (kind === 'link') { linkDialog(item); return; }
       }
 
+      const redoOne = t.closest('[data-redo-one]');
+      if (redoOne) {
+        const cardEl = redoOne.closest('.card');
+        if (cardEl && cardEl._item) {
+          Session.start({ title: '重做 · 单题', subtitle: '', items: [cardEl._item], redo: true });
+        }
+        return;
+      }
+
       const linkChip = t.closest('[data-linkto]');
       if (linkChip) {
         const cardEl = linkChip.closest('.card');
