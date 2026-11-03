@@ -331,9 +331,9 @@
     if (!ids.length && !done && !Store.key(q0.id)) { row.hidden = true; row.innerHTML = ''; return; }
     row.hidden = false;
     const fixed = !!Store.key(q0.id);
-    row.innerHTML = '<button class="link-chip' + (fixed ? ' fix-chip' : '') + '" data-fixkey="1">' +
-        (fixed ? '答案已订正 · 改' : '矫正答案') + '</button>' +
-      (done ? '<button class="link-chip redo-chip" data-redo-one="1">重做这题</button>' : '') +
+    row.innerHTML = '<button class="icon-btn mini' + (fixed ? ' on-fix' : '') + '" data-fixkey="1" title="' +
+        (fixed ? '答案已订正（点此再改）' : '矫正这道题的答案') + '">' + (fixed ? '订' : '矫') + '</button>' +
+      (done ? '<button class="icon-btn mini redo-mini" data-redo-one="1" title="重做这题">↻</button>' : '') +
       (ids.length ? '<span class="hint">关联</span>' : '') + ids.map(function (id) {
       const q = Bank.q(id);
       if (!q) return '';
