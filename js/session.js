@@ -441,7 +441,10 @@
         {
           label: '保存', cls: 'primary', onClick: function () {
             const v = Object.keys(picks).filter(function (k) { return picks[k]; }).sort().join('');
-            Store.setKey(q.id, v);
+            Store.setKey(q.id, v, {
+              label: q.label, subj: q.subj, ans: q.ans || '',
+              stem: (q.stem || '').slice(0, 90)
+            });
             if (S.res[q.id]) {
               S.res[q.id].ok = sortLetters(S.sel[q.id] || '') === sortLetters(Bank.truth(q)) && !!S.sel[q.id];
               Store.record(q.id, S.sel[q.id] || '', S.res[q.id].ok);
