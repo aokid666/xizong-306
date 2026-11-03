@@ -617,6 +617,43 @@
     });
   };
 
+  function manageFolders() {
+    const fs0 = Store.folders();
+    const body = U.el('div');
+    body.innerHTML = fs0.length
+      ? '<div class="fold-list">' + fs0.map(function (f) {
+        const n = Object.keys(Store.doc.folderOf || {}).filter(function (q) { return Store.doc.folderOf[q] === f.id; }).length;
+        return '<div class="fold-row"><span class="grow">' + esc(f.name) + ' <span class="hint">' + n + ' 题</span></span>' +
+          '<button class="btn ghost sm" data-ren="' + f.id + '">改名</button>' +
+          '<button class="btn ghost sm" data-del="' + f.id + '">删除</button></div>';
+      }).join('') + '</div>'
+      : '<div class="empty">还没有文件夹</div>';
+    U.modal({ title: '管理文件夹', body: body, buttons: [{ label: '关闭', cls: 'primary' }] });
+    body.addEventListener('click', function (e) {
+      const rn = e.target.closest('[data-ren]');
+      if (rn) {
+        const id = rn.dataset.ren;
+        const cur = (Store.folders().filter(function (f) { return f.id === id; })[0] || {}).name || '';
+        const inp = U.el('input', { class: 'input', style: 'width:100%', value: cur });
+        const b2 = U.el('div'); b2.appendChild(inp);
+        U.modal({
+          title: '重命名文件夹', body: b2, onOpen: function () { inp.focus(); inp.select(); },
+          buttons: [{ label: '取消' }, { label: '保存', cls: 'primary', onClick: function () {
+            if (inp.value.trim()) Store.renameFolder(id, inp.value.trim());
+            Views.lists();
+          } }]
+        });
+        return;
+      }
+      const dl = e.target.closest('[data-del]');
+      if (dl) {
+        Store.delFolder(dl.dataset.del);
+        U.toast('已删除（题目回到未分类）');
+        Views.lists();
+      }
+    });
+  }
+
   /* ================= 我的题单（组题历史） ================= */
   function renderPapers() {
     const box = document.getElementById('paper-box');
@@ -701,6 +738,8 @@
 
     let tab = 'fav', items = [];
 
+    let favFolder = '';
+
     function render() {
       const box = document.getElementById('list-body');
       const rows = [];
@@ -711,6 +750,11 @@
       (Bank.mock ? Bank.mock.list : []).forEach(function (q) { all.push(q); });
       all.forEach(function (q) {
         if (tab === 'fav' && !Store.isFav(q.id)) return;
+        if (tab === 'fav' && favFolder) {
+          const f = Store.folderOf(q.id);
+          if (favFolder === '__none') { if (f) return; }
+          else if (f !== favFolder) return;
+        }
         if (tab === 'wrong') { const p = Store.prog(q.id); if (!p || p.ok) return; }
         if (tab === 'flag' && !Store.flag(q.id)) return;
         if (tab === 'note') { const nt = Store.note(q.id); if (!nt) return; }
@@ -728,15 +772,80 @@
       }
       box._items = items;
       box.onclick = function (ev) {
+        const fc = ev.target.closest('[data-fold]');
+        if (fc) {
+          const v = fc.dataset.fold;
+          if (v === '__new') {
+            const body = U.el('div');
+            const inp = U.el('input', { class: 'input', style: 'width:100%', placeholder: '文件夹名称' });
+            body.appendChild(inp);
+            U.modal({
+              title: '新建收藏文件夹', body: body, onOpen: function () { inp.focus(); },
+              buttons: [{ label: '取消' }, {
+                label: '创建', cls: 'primary', onClick: function () {
+                  const name = inp.value.trim();
+                  if (!name) return;
+                  const f = Store.addFolder(name);
+                  favFolder = f.id;
+                  render();
+                  U.toast('已创建');
+                }
+              }]
+            });
+            return;
+          }
+          if (v === '__manage') { manageFolders(); return; }
+          favFolder = v;
+          render();
+          return;
+        }
+        const mv = ev.target.closest('[data-move]');
+        if (mv) {
+          const idx = +mv.dataset.move;
+          const it = (box._items || [])[idx];
+          const q0 = it && it.qs[0];
+          if (!q0) return;
+          const fs = Store.folders();
+          const body = U.el('div');
+          body.innerHTML = '<p class="hint" style="margin-bottom:8px">把「' + esc(q0.label || q0.id) + '」放进：</p>' +
+            '<div class="fold-list">' +
+            '<button class="fold-opt" data-setf="">未分类</button>' +
+            fs.map(function (f) { return '<button class="fold-opt" data-setf="' + f.id + '">' + esc(f.name) + '</button>'; }).join('') +
+            '</div>';
+          U.modal({ title: '移入文件夹', body: body, buttons: [{ label: '关闭' }] });
+          body.addEventListener('click', function (e2) {
+            const b2 = e2.target.closest('[data-setf]');
+            if (!b2) return;
+            it.qs.forEach(function (q) { Store.setFolder(q.id, b2.dataset.setf); });
+            U.closeModal();
+            render();
+            U.toast('已移入');
+          });
+          return;
+        }
         const rdo = ev.target.closest('[data-redo-list]');
         if (!rdo || !box._items || !box._items.length) return;
         redoConfirm(box._items, rdo.dataset.redoList === 'wrong' ? '错题' : '收藏', box._items.length + ' 组');
       };
+      let folderBar = '';
+      if (tab === 'fav') {
+        const fs = Store.folders();
+        const cur = favFolder || '';
+        folderBar = '<div class="fold-bar">' +
+          '<button class="fold-chip' + (cur === '' ? ' on' : '') + '" data-fold="">全部</button>' +
+          '<button class="fold-chip' + (cur === '__none' ? ' on' : '') + '" data-fold="__none">未分类</button>' +
+          fs.map(function (f) {
+            return '<button class="fold-chip' + (cur === f.id ? ' on' : '') + '" data-fold="' + f.id + '">' + esc(f.name) + '</button>';
+          }).join('') +
+          '<button class="fold-chip add" data-fold="__new">＋ 新建</button>' +
+          '<button class="fold-chip add" data-fold="__manage">管理</button>' +
+          '</div>';
+      }
       box.innerHTML = (items.length
           ? '<div class="list-tools" style="margin-bottom:10px"><button class="btn redo sm" data-redo-list="' + tab + '">重做这 ' + items.length + ' 组</button>' +
             '<span class="hint">重做期间不显示原有笔记/手写/高亮，提交后才显示，也不影响原来的正误记录</span></div>'
           : '') +
-        '<div class="list result-list">' + items.map(function (it, i) {
+        folderBar + '<div class="list result-list">' + items.map(function (it, i) {
         const q = it.qs[0];
         const chap = q.mock ? null : Bank.chapterMeta(q.subj, q.ci);
         const fl = Store.flag(q.id);
@@ -1362,7 +1471,9 @@
         return '<div class="row" data-i="' + i + '"><div class="grow">' +
           '<div class="t">' + mark(q.stem.slice(0, 90)) + (q.stem.length > 90 ? '…' : '') + '</div>' +
           '<div class="d">' + where + (it.qs.length > 1 ? ' · 共 ' + it.qs.length + ' 小问' : '') + '</div></div>' +
-          '<span class="num">' + (q.mock ? '模拟' : esc(q.label)) + '</span><span class="go">→</span></div>';
+          '<span class="num">' + (q.mock ? '模拟' : esc(q.label)) + '</span>' +
+          (tab === 'fav' ? '<button class="icon-btn" data-move="' + i + '" title="移入文件夹">夹</button>' : '') +
+          '<span class="go">→</span></div>';
       }).join('') + '</div>';
       box._items = uniq;
     }
