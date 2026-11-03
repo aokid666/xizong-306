@@ -6,7 +6,7 @@
   const esc = U.esc;
 
   const S = {
-    title: '', subtitle: '', items: [], sel: {}, res: {},
+    title: '', subtitle: '', items: [], sel: {}, res: {}, redo: false, redoRes: {},
     mode: 'scroll', idx: 0, chunk: 10, submitMode: 'single',
     startTs: 0, done: false
   };
@@ -28,7 +28,13 @@
     S.title = opt.title || '练习';
     S.subtitle = opt.subtitle || '';
     S.items = opt.items || [];
-    // 之前做过的题：恢复上次的选择、对错、解析（重做模式除外）
+    S.redo = !!opt.redo;
+    S.redoRes = {};
+    if (S.redo) {
+      S.items.forEach(function (it) {
+        it.qs.forEach(function (q) { Card.markHidden(q.id, true); });
+      });
+    }
     if (!opt.redo) {
       S.items.forEach(function (it) {
         it.qs.forEach(function (q) {
@@ -315,13 +321,15 @@
       if (!truth) { U.toast('这题还没有正确答案，点「✎答」录入后再提交'); return; }
       const ok = sortLetters(chosen) === sortLetters(truth);
       S.res[q.id] = { ok: ok, ans: chosen };
-      Store.record(q.id, chosen, ok);
+      if (S.redo) S.redoRes[q.id] = { a: chosen, ok: ok };
+      else Store.record(q.id, chosen, ok);
       any = true;
     });
     if (!any) { U.toast('先选择答案'); return; }
     const card = U.$('.card[data-key="' + cssKey(item.key) + '"]', content);
     if (card) {
       reState(card);
+      if (S.redo) item.qs.forEach(function (q) { if (S.redoRes[q.id]) Card.reveal(card, q.id); });
       if (S.mode === 'paged') Card.hwRedraw(card);
     }
     refreshBar();
@@ -641,7 +649,14 @@
         {
           label: '退出', cls: 'primary', onClick: function () {
             saveSnapshot();
-            S.items = [];
+            if (S.redo && Object.keys(S.redoRes).length) {
+      Object.keys(S.redoRes).forEach(function (qid) {
+        Store.record(qid, S.redoRes[qid].a, S.redoRes[qid].ok);
+      });
+      U.toast('重做结果已保存（' + Object.keys(S.redoRes).length + ' 题）', 3000);
+    }
+    S.redo = false; S.redoRes = {};
+    S.items = [];
             if (pager) pager.remove();
             document.body.classList.remove('has-pager');
             location.hash = '#/home';
