@@ -1,5 +1,5 @@
 /* 离线缓存：第二次打开基本秒开 */
-const VER = 'xz-v20261103q';
+const VER = 'xz-v20261104d';
 const SHELL = [
   './', './index.html', './css/app.css',
   './js/zip.js', './js/store.js', './js/bank.js', './js/card.js',
@@ -31,6 +31,12 @@ self.addEventListener('fetch', function (e) {
     e.respondWith(
       fetch(req).catch(function () { return caches.match('./index.html'); })
     );
+    return;
+  }
+
+  // 题库数据：优先网络（避免缓存里是坏文件导致一直载入），失败再用缓存
+  if (url.pathname.indexOf('/data/') >= 0) {
+    e.respondWith(fetch(req).catch(function () { return caches.match(req); }));
     return;
   }
 
