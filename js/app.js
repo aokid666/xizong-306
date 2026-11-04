@@ -6,7 +6,13 @@
 
   function route() {
     const hash = location.hash || '#/home';
-    if (hash.indexOf('#/play') === 0) return;
+    // 刷新停在 #/play：从快照恢复会话；没有快照就回首页，绝不白屏
+    if (hash.indexOf('#/play') === 0) {
+      let r = false;
+      try { r = Session.resume(); } catch (e) { r = false; }
+      if (r === false) location.replace(location.pathname + '#/home');
+      return;
+    }
 
     Session.teardown();
 
