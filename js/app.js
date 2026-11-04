@@ -25,6 +25,11 @@
     if (hash === '#/build') return Views.build();
     if (hash === '#/cases') return Views.cases();
     if (hash === '#/maps') return Views.maps();
+    if (hash === '#/lectures') {
+      Views.home();
+      setTimeout(function () { if (window.LectureUI) LectureUI.open(null); }, 250);
+      return;
+    }
     if (hash.indexOf('#/maps/') === 0) return Views.maps(+hash.slice(7));
     if (hash === '#/mock') return Views.mock();
     if (hash.indexOf('#/mock/sub/') === 0) return Views.mockSubject(hash.slice('#/mock/sub/'.length));
