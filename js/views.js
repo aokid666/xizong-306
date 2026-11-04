@@ -55,6 +55,10 @@
 
   /* ================= 首页 ================= */
   Views.home = function () {
+    setTimeout(function () {
+      const b = document.querySelector('[data-open-lecture]');
+      if (b) b.onclick = function () { if (window.LectureUI) LectureUI.open(null); else U.toast('讲义还没准备好'); };
+    }, 0);
     const st = Store.stats();
     const total = Bank.meta.total;
     const years = Bank.meta.years;
@@ -121,7 +125,7 @@
   Views.years = function () {
     const ys = Bank.meta.years.slice().reverse();
     let html = crumb([{ t: '首页', href: '#/home' }, { t: '按年份刷题' }]);
-    html += '<div class="page-hd"><h1>按年份刷题</h1><div class="sub">选择年份后，可以选择「滚动（像纸质卷子一样）」或「单题（左右切换）」作答方式，也可以随机打乱题序。病例题始终成组出现。</div></div>';
+    html += '<div class="page-hd"><h1>按年份刷题</h1><div class="sub">共 6,749 道真题 · 1,127 道模拟题 · 272 页导图 · 3,146 页讲义</div></div>';
     html += '<div class="tree-tools"><label class="chk"><input type="checkbox" id="y-human"> 年份套题包含「人文精神」</label>' +
       '<span class="hint">默认只取 306 的五个科目</span></div>';
     html += '<div class="list">';
