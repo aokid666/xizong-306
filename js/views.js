@@ -185,6 +185,18 @@
       '<div class="field"><div class="k">题目顺序</div><div class="v">' +
       '<div class="seg" data-seg="order"><button data-v="seq" class="on">按题号</button><button data-v="rand">随机打乱</button></div>' +
       '<span class="hint">打乱时病例题整组移动，不会拆开</span></div></div>';
+
+    // 段选按钮：自己绑定，避免依赖全局处理器
+    body.addEventListener('click', function (e) {
+      const b = e.target.closest('[data-seg] button');
+      if (!b) return;
+      e.preventDefault();
+      const seg = b.closest('[data-seg]');
+      Array.prototype.forEach.call(seg.querySelectorAll('button'), function (x) {
+        x.classList.toggle('on', x === b);
+      });
+    });
+
     U.modal({
       title: y + ' 年真题', body: body, buttons: [
         { label: '取消' },
