@@ -44,12 +44,29 @@
       return s ? s.chapters[ci] : null;
     },
 
-    _loadScript(src) {
+    _loadScript(src, tries) {
+      tries = tries || 0;
       return new Promise(function (resolve, reject) {
         const s = document.createElement('script');
+        let done = false;
+        const timer = setTimeout(function () {
+          if (done) return;
+          done = true;
+          s.remove();
+          if (tries < 2) { resolve(Bank._loadScript(src + (src.indexOf('?') >= 0 ? '&' : '?') + 'r=' + (tries + 1), tries + 1)); }
+          else reject(new Error('加载超时: ' + src));
+        }, 15000);
         s.src = src;
-        s.onload = function () { resolve(); };
-        s.onerror = function () { reject(new Error('加载失败: ' + src)); };
+        s.onload = function () {
+          if (done) return;
+          done = true; clearTimeout(timer); resolve();
+        };
+        s.onerror = function () {
+          if (done) return;
+          done = true; clearTimeout(timer); s.remove();
+          if (tries < 2) { resolve(Bank._loadScript(src + (src.indexOf('?') >= 0 ? '&' : '?') + 'r=' + (tries + 1), tries + 1)); }
+          else reject(new Error('加载失败: ' + src));
+        };
         document.head.appendChild(s);
       });
     },
