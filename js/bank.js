@@ -78,27 +78,12 @@
       });
     },
 
-    _loadScript(src, tries) {
-      tries = tries || 0;
+    _loadScript(src) {
       return new Promise(function (resolve, reject) {
         const el = document.createElement('script');
-        let done = false;
-        const sep = src.indexOf('?') >= 0 ? '&' : '?';
-        const timer = setTimeout(function () {
-          if (done) return;
-          done = true;
-          el.remove();
-          if (tries < 2) resolve(Bank._loadScript(src + sep + 'r=' + (tries + 1), tries + 1));
-          else reject(new Error('加载超时: ' + src));
-        }, 15000);
         el.src = src;
-        el.onload = function () { if (done) return; done = true; clearTimeout(timer); resolve(); };
-        el.onerror = function () {
-          if (done) return;
-          done = true; clearTimeout(timer); el.remove();
-          if (tries < 2) resolve(Bank._loadScript(src + sep + 'r=' + (tries + 1), tries + 1));
-          else reject(new Error('加载失败: ' + src));
-        };
+        el.onload = function () { resolve(); };
+        el.onerror = function () { el.remove(); reject(new Error('加载失败: ' + src)); };
         document.head.appendChild(el);
       });
     },
