@@ -51,7 +51,7 @@
     }
     S.mode = opt.mode || Store.get('mode') || 'scroll';
     S.chunk = Math.max(1, Store.get('chunk') || 10);
-    S.submitMode = Store.get('submitMode') || 'single';
+    S.submitMode = opt.submitMode || Store.get('submitMode') || 'single';
     S.startTs = Date.now();
     if (!S.items.length) { U.toast('没有符合条件的题目'); return; }
     saveSnapshot();
