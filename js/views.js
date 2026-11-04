@@ -1113,7 +1113,7 @@
   /* ================= 病例题专项 ================= */
   Views.cases = function () {
     shell('<div class="empty">正在载入病例题…</div>');
-    Bank.ensureAll().then(function () { return Bank.ensureCases(); }).then(function () {
+    Bank.ensureCases().then(function () {
       const topics = Bank.caseTopics();
       const total = topics.reduce(function (a, t) { return a + t.n; }, 0);
       let html = crumb([{ t: '首页', href: '#/home' }, { t: '病例题专项' }]);
