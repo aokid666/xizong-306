@@ -184,15 +184,7 @@
       '<div class="seg" data-seg="mode"><button data-v="scroll" class="on">滚动（纸质版）</button><button data-v="paged">单题（左右切换）</button></div></div></div>' +
       '<div class="field"><div class="k">题目顺序</div><div class="v">' +
       '<div class="seg" data-seg="order"><button data-v="seq" class="on">按题号</button><button data-v="rand">随机打乱</button></div>' +
-      '<span class="hint">打乱时病例题整组移动，不会拆开</span></div></div>' +
-      '<div class="field"><div class="k">提交方式</div><div class="v">' +
-      '<div class="seg" data-seg="submit"><button data-v="single" class="on">每题提交</button><button data-v="chunk">每 N 题一起提交</button><button data-v="all">整卷提交</button></div>' +
-      '<input class="input" type="number" min="2" max="100" value="' + (Store.get('chunk') || 10) + '" style="width:72px" data-chunk>' +
-      '<span class="hint">N</span></div></div>' +
-      '<div class="field"><div class="k">范围</div><div class="v" style="gap:14px">' +
-      '<label class="chk"><input type="checkbox" data-range="from" checked> 从第 <input class="input" type="number" min="1" value="1" style="width:68px"> 题</label>' +
-      '<label class="chk">到第 <input class="input" type="number" min="1" value="' + 999 + '" style="width:68px" data-to> 题</label>' +
-      '</div></div>';
+      '<span class="hint">打乱时病例题整组移动，不会拆开</span></div></div>';
     U.modal({
       title: y + ' 年真题', body: body, buttons: [
         { label: '取消' },
