@@ -201,8 +201,7 @@
             const mode = segVal(body, 'mode'), order = segVal(body, 'order'), submit = segVal(body, 'submit');
             const chunk = parseInt((body.querySelector('[data-chunk]') || {}).value || 10, 10) || 10;
             Store.set('chunk', chunk);
-            Store.set('submitMode', submit);
-            Store.set('mode', mode);
+                  Store.set('mode', mode);
             loadThen(Bank.subjectNames(), function () {
               let items = Bank.itemsByYear(y, { includeHumanity: incHuman });
               const inputs = body.querySelectorAll('input[type=number]');
