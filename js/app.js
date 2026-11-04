@@ -79,6 +79,14 @@
     const ft = document.getElementById('foot-total');
     if (ft) ft.textContent = U.fmtNum(Bank.meta.total);
 
+    // 后台预取全部题库：之后任何页面都从内存取，不再等待网络
+    setTimeout(function () {
+      try {
+        if (Bank.ensureAll) Bank.ensureAll().catch(function () { });
+        else Bank.ensure(Bank.subjectNames()).catch(function () { });
+      } catch (e) { }
+    }, 1200);
+
     // 搜索
     const search = document.getElementById('q-search');
     const doSearch = function () {
