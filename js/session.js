@@ -119,7 +119,7 @@
       '<span class="sp"></span>' +
       '<div class="session-tools">' +
       '<button class="btn ghost sm" data-tool="sheet">答题卡</button>' +
-      '<button class="btn ghost sm" data-tool="submit">' + (S.submitMode === 'single' ? '提交本题' : '提交本组') + '</button>' +
+      '<button class="btn ghost sm" data-tool="submit">' + (S.submitMode === 'single' ? '提交本题' : '提交已做') + '</button>' +
       '<button class="btn ghost sm" data-tool="mode">' + (S.mode === 'scroll' ? '单题模式' : '滚动模式') + '</button>' +
       '<button class="btn ghost sm" data-tool="exit">退出</button>' +
       '</div></div>';
@@ -276,7 +276,10 @@
       if (tool) {
         const k = tool.dataset.tool;
         if (k === 'sheet') openSheet();
-        else if (k === 'submit') submitChunk();
+        else if (k === 'submit') {
+        if (S.submitMode === 'single') submitChunk();
+        else submitPending();
+      }
         else if (k === 'submit-chunk') submitRange(+tool.dataset.from, +tool.dataset.to);
         else if (k === 'mode') toggleMode();
         else if (k === 'exit') exit();
@@ -333,6 +336,29 @@
   }
 
   /* ---------------- 提交与判定 ---------------- */
+  function submitPending() {
+    let n = 0;
+    S.items.forEach(function (it) {
+      if (it.qs.every(function (q) { return S.res[q.id]; })) return;
+      if (!it.qs.some(function (q) { return S.sel[q.id]; })) return;
+      it.qs.forEach(function (q) {
+        if (!S.sel[q.id] || S.res[q.id]) return;
+        const truth = Bank.truth(q);
+        if (!truth) return;
+        const ok = sortLetters(S.sel[q.id]) === sortLetters(truth);
+        S.res[q.id] = { ok: ok, ans: S.sel[q.id] };
+        if (S.redo) S.redoRes[q.id] = { a: S.sel[q.id], ok: ok };
+        else Store.record(q.id, S.sel[q.id], ok);
+        n++;
+      });
+      const card = U.$('.card[data-key="' + cssKey(it.key) + '"]', content);
+      if (card) { reState(card); if (S.redo) it.qs.forEach(function (q) { if (S.redoRes[q.id]) Card.reveal(card, q.id); }); }
+    });
+    if (!n) { U.toast('还没有作答的题'); return; }
+    refreshBar(); saveSnapshot();
+    U.toast('已提交 ' + n + ' 题', 2500);
+  }
+
   function submitItem(item) {
     let any = false;
     item.qs.forEach(function (q) {
