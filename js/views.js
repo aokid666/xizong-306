@@ -741,7 +741,7 @@
 
     let tab = 'fav', items = [];
 
-    let favFolder = '';
+    let favFolder = '', favYear = '', favSubj = '', favSrc = '';
 
     function render() {
       const box = document.getElementById('list-body');
@@ -757,6 +757,13 @@
           const f = Store.folderOf(q.id);
           if (favFolder === '__none') { if (f) return; }
           else if (f !== favFolder) return;
+        }
+        if (tab === 'fav' && favYear && String(q.y) !== favYear) return;
+        if (tab === 'fav' && favSubj && q.subj !== favSubj) return;
+        if (tab === 'fav' && favSrc) {
+          const isMock = !!q.mock;
+          if (favSrc === 'real' && isMock) return;
+          if (favSrc === 'mock' && !isMock) return;
         }
         if (tab === 'wrong') { const p = Store.prog(q.id); if (!p || p.ok) return; }
         if (tab === 'flag' && !Store.flag(q.id)) return;
@@ -774,6 +781,15 @@
         return;
       }
       box._items = items;
+      box.onchange = function (ev) {
+        const sel = ev.target.closest('[data-fav]');
+        if (!sel) return;
+        const k = sel.dataset.fav;
+        if (k === 'year') favYear = sel.value;
+        if (k === 'subj') favSubj = sel.value;
+        if (k === 'src') favSrc = sel.value;
+        render();
+      };
       box.onclick = function (ev) {
         const fc = ev.target.closest('[data-fold]');
         if (fc) {
@@ -831,6 +847,7 @@
         redoConfirm(box._items, rdo.dataset.redoList === 'wrong' ? '错题' : '收藏', box._items.length + ' 组');
       };
       let folderBar = '';
+      const years = Bank.meta.years.map(function (x) { return x.y; }).reverse();
       if (tab === 'fav') {
         const fs = Store.folders();
         const cur = favFolder || '';
@@ -842,7 +859,19 @@
           }).join('') +
           '<button class="fold-chip add" data-fold="__new">＋ 新建</button>' +
           '<button class="fold-chip add" data-fold="__manage">管理</button>' +
-          '</div>';
+          '</div>' +
+          '<div class="fold-filter">' +
+          '<select class="select sm" data-fav="year"><option value="">年份</option>' +
+          years.map(function (y) { return '<option value="' + y + '"' + (favYear === String(y) ? ' selected' : '') + '>' + y + '</option>'; }).join('') +
+          '</select>' +
+          '<select class="select sm" data-fav="subj"><option value="">科目</option>' +
+          ['生理学','生物化学','病理学','内科学','外科学','人文精神'].map(function (x) {
+            return '<option value="' + x + '"' + (favSubj === x ? ' selected' : '') + '>' + x + '</option>';
+          }).join('') + '</select>' +
+          '<select class="select sm" data-fav="src"><option value="">来源</option>' +
+          '<option value="real"' + (favSrc === 'real' ? ' selected' : '') + '>真题</option>' +
+          '<option value="mock"' + (favSrc === 'mock' ? ' selected' : '') + '>模拟题</option>' +
+          '</select></div>';
       }
       box.innerHTML = (items.length
           ? '<div class="list-tools" style="margin-bottom:10px"><button class="btn redo sm" data-redo-list="' + tab + '">重做这 ' + items.length + ' 组</button>' +
