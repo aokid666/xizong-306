@@ -120,6 +120,7 @@
       '<div class="session-tools">' +
       '<button class="btn ghost sm" data-tool="sheet">答题卡</button>' +
       '<button class="btn ghost sm" data-tool="submit">' + (S.submitMode === 'single' ? '提交本题' : '提交已做') + '</button>' +
+      '<button class="btn ghost sm" data-tool="mode" title="切换提交方式">' + (S.submitMode === 'single' ? '每题' : '整卷') + '</button>' +
       '<button class="btn ghost sm" data-tool="mode">' + (S.mode === 'scroll' ? '单题模式' : '滚动模式') + '</button>' +
       '<button class="btn ghost sm" data-tool="exit">退出</button>' +
       '</div></div>';
@@ -276,7 +277,15 @@
       if (tool) {
         const k = tool.dataset.tool;
         if (k === 'sheet') openSheet();
-        else if (k === 'submit') {
+        else if (k === 'mode') {
+        S.submitMode = (S.submitMode === 'single') ? 'all' : 'single';
+        Store.set('submitMode', S.submitMode);
+        saveSnapshot();
+        mount();
+        U.toast(S.submitMode === 'single' ? '已切换为：每题提交' : '已切换为：整卷提交（做多少交多少）');
+        return;
+      }
+      else if (k === 'submit') {
         if (S.submitMode === 'single') submitChunk();
         else submitPending();
       }
