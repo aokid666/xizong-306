@@ -44,30 +44,79 @@
       return s ? s.chapters[ci] : null;
     },
 
+    _idb() {
+      if (this._idbP) return this._idbP;
+      this._idbP = new Promise(function (res) {
+        try {
+          const r = indexedDB.open('xz-bank', 1);
+          r.onupgradeneeded = function () { try { r.result.createObjectStore('f'); } catch (e) { } };
+          r.onsuccess = function () { res(r.result); };
+          r.onerror = function () { res(null); };
+        } catch (e) { res(null); }
+      });
+      return this._idbP;
+    },
+    _idbGet(key) {
+      return this._idb().then(function (db) {
+        if (!db) return null;
+        return new Promise(function (res) {
+          try {
+            const tx = db.transaction('f', 'readonly');
+            const g = tx.objectStore('f').get(key);
+            g.onsuccess = function () { res(g.result || null); };
+            g.onerror = function () { res(null); };
+          } catch (e) { res(null); }
+        });
+      });
+    },
+    _idbSet(key, val) {
+      this._idb().then(function (db) {
+        if (!db) return;
+        try {
+          db.transaction('f', 'readwrite').objectStore('f').put(val, key);
+        } catch (e) { }
+      });
+    },
+
     _loadScript(src, tries) {
       tries = tries || 0;
-      return new Promise(function (resolve, reject) {
-        const s = document.createElement('script');
-        let done = false;
-        const timer = setTimeout(function () {
-          if (done) return;
-          done = true;
-          s.remove();
-          if (tries < 2) { resolve(Bank._loadScript(src + (src.indexOf('?') >= 0 ? '&' : '?') + 'r=' + (tries + 1), tries + 1)); }
-          else reject(new Error('加载超时: ' + src));
-        }, 15000);
-        s.src = src;
-        s.onload = function () {
-          if (done) return;
-          done = true; clearTimeout(timer); resolve();
-        };
-        s.onerror = function () {
-          if (done) return;
-          done = true; clearTimeout(timer); s.remove();
-          if (tries < 2) { resolve(Bank._loadScript(src + (src.indexOf('?') >= 0 ? '&' : '?') + 'r=' + (tries + 1), tries + 1)); }
-          else reject(new Error('加载失败: ' + src));
-        };
-        document.head.appendChild(s);
+      const self = this;
+      const key = 'b:' + src;
+      return self._idbGet(key).then(function (cached) {
+        if (cached) {
+          try { (0, eval)(cached); return; } catch (e) { }
+        }
+        return new Promise(function (resolve, reject) {
+          let done = false;
+          const sep = src.indexOf('?') >= 0 ? '&' : '?';
+          const timer = setTimeout(function () {
+            if (done) return;
+            done = true;
+            if (tries < 2) resolve(self._loadScript(src + sep + 'r=' + (tries + 1), tries + 1));
+            else reject(new Error('加载超时: ' + src));
+          }, 15000);
+          // 先用普通 script 标签（兼容性最好），成功后把文本存进本地
+          const el = document.createElement('script');
+          el.src = src;
+          el.onload = function () {
+            if (done) return;
+            done = true; clearTimeout(timer);
+            resolve();
+            fetch(src, { cache: 'force-cache' }).then(function (r) { return r.ok ? r.text() : null; })
+              .then(function (txt) { if (txt) self._idbSet(key, txt); }).catch(function () { });
+          };
+          el.onerror = function () {
+            if (done) return;
+            done = true; clearTimeout(timer);
+            el.remove();
+            self._idbGet(key).then(function (txt) {
+              if (txt) { try { (0, eval)(txt); resolve(); return; } catch (e) { } }
+              if (tries < 2) resolve(self._loadScript(src + sep + 'r=' + (tries + 1), tries + 1));
+              else reject(new Error('加载失败: ' + src));
+            });
+          };
+          document.head.appendChild(el);
+        });
       });
     },
 
