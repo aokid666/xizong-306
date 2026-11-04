@@ -80,43 +80,26 @@
 
     _loadScript(src, tries) {
       tries = tries || 0;
-      const self = this;
-      const key = 'b:' + src;
-      return self._idbGet(key).then(function (cached) {
-        if (cached) {
-          try { (0, eval)(cached); return; } catch (e) { }
-        }
-        return new Promise(function (resolve, reject) {
-          let done = false;
-          const sep = src.indexOf('?') >= 0 ? '&' : '?';
-          const timer = setTimeout(function () {
-            if (done) return;
-            done = true;
-            if (tries < 2) resolve(self._loadScript(src + sep + 'r=' + (tries + 1), tries + 1));
-            else reject(new Error('加载超时: ' + src));
-          }, 15000);
-          // 先用普通 script 标签（兼容性最好），成功后把文本存进本地
-          const el = document.createElement('script');
-          el.src = src;
-          el.onload = function () {
-            if (done) return;
-            done = true; clearTimeout(timer);
-            resolve();
-            fetch(src, { cache: 'force-cache' }).then(function (r) { return r.ok ? r.text() : null; })
-              .then(function (txt) { if (txt) self._idbSet(key, txt); }).catch(function () { });
-          };
-          el.onerror = function () {
-            if (done) return;
-            done = true; clearTimeout(timer);
-            el.remove();
-            self._idbGet(key).then(function (txt) {
-              if (txt) { try { (0, eval)(txt); resolve(); return; } catch (e) { } }
-              if (tries < 2) resolve(self._loadScript(src + sep + 'r=' + (tries + 1), tries + 1));
-              else reject(new Error('加载失败: ' + src));
-            });
-          };
-          document.head.appendChild(el);
-        });
+      return new Promise(function (resolve, reject) {
+        const el = document.createElement('script');
+        let done = false;
+        const sep = src.indexOf('?') >= 0 ? '&' : '?';
+        const timer = setTimeout(function () {
+          if (done) return;
+          done = true;
+          el.remove();
+          if (tries < 2) resolve(Bank._loadScript(src + sep + 'r=' + (tries + 1), tries + 1));
+          else reject(new Error('加载超时: ' + src));
+        }, 15000);
+        el.src = src;
+        el.onload = function () { if (done) return; done = true; clearTimeout(timer); resolve(); };
+        el.onerror = function () {
+          if (done) return;
+          done = true; clearTimeout(timer); el.remove();
+          if (tries < 2) resolve(Bank._loadScript(src + sep + 'r=' + (tries + 1), tries + 1));
+          else reject(new Error('加载失败: ' + src));
+        };
+        document.head.appendChild(el);
       });
     },
 
