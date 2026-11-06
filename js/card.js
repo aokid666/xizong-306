@@ -166,7 +166,7 @@
 
   function build(item, index, ctx) {
     // 多小问（病例题/B型题）如果数据里没标出公共题干，这里现场算一次，避免每问都重复整段病例
-    if (item.qs && item.qs.length > 1 && !item.vignette) {
+    if (item.qs && item.qs.length > 1 && (!item.vignette || !item.tails || item.tails.length !== item.qs.length)) {
       let pre = item.qs[0].stem || '';
       for (let i = 1; i < item.qs.length; i++) {
         const s2 = item.qs[i].stem || '';
