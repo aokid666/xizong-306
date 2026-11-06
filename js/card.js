@@ -138,7 +138,10 @@
 
   function subqHTML(q, item, ctx, idx) {
     const multi = q.multi;
-    const disp = (item.vignette && item.tails && item.tails[idx] != null) ? item.tails[idx] : q.stem;
+    let disp = (item.vignette && item.tails && item.tails[idx] != null) ? item.tails[idx] : q.stem;
+    if (item.vignette && disp && disp.indexOf(item.vignette) === 0) {
+      disp = disp.slice(item.vignette.length).replace(/^[\s，。、；：,.;:]+/, '');
+    }
     let head = '';
     if (item.qs.length > 1) {
       head = '<div class="subq-hd"><b>第 ' + (idx + 1) + ' 小问</b>' +
