@@ -642,6 +642,7 @@
     /* ---------- 标准答案（模拟题可自行订正） ---------- */
     truth(q) {
       const k = Store.doc.keys && Store.doc.keys[q.id];
+      if (k && k.v === '__none') return '';
       return (k && k.v) ? k.v : (q.ans || '');
     },
 
