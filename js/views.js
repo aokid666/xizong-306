@@ -184,7 +184,13 @@
       '<div class="seg" data-seg="mode"><button data-v="scroll" class="on">滚动（纸质版）</button><button data-v="paged">单题（左右切换）</button></div></div></div>' +
       '<div class="field"><div class="k">题目顺序</div><div class="v">' +
       '<div class="seg" data-seg="order"><button data-v="seq" class="on">按题号</button><button data-v="rand">随机打乱</button></div>' +
-      '<span class="hint">打乱时病例题整组移动，不会拆开</span></div></div>';
+      '<span class="hint">打乱时病例题整组移动，不会拆开</span></div></div>' +
+      '<div class="field"><div class="k">范围</div><div class="v">' +
+      '<span class="hint">从第</span>' +
+      '<input class="input" type="number" min="1" value="1" data-from style="width:86px">' +
+      '<span class="hint">题 到第</span>' +
+      '<input class="input" type="number" min="1" value="999" data-to style="width:86px">' +
+      '<span class="hint">题（留空＝全部）</span></div></div>';
 
     // 段选按钮：自己绑定，避免依赖全局处理器
     body.addEventListener('click', function (e) {
@@ -208,9 +214,10 @@
                   Store.set('mode', mode);
             loadThen(Bank.subjectNames(), function () {
               let items = Bank.itemsByYear(y, { includeHumanity: incHuman });
-              const inputs = body.querySelectorAll('input[type=number]');
-              const from = Math.max(1, parseInt(inputs[1] ? inputs[1].value : 1, 10) || 1);
-              const to = parseInt(body.querySelector('[data-to]').value, 10) || 9999;
+              const fromEl = body.querySelector('[data-from]');
+              const toEl = body.querySelector('[data-to]');
+              const from = Math.max(1, parseInt(fromEl ? fromEl.value : 1, 10) || 1);
+              const to = parseInt(toEl ? toEl.value : 9999, 10) || 9999;
               items = items.filter(function (it) {
                 const n = it.qs[0].n;
                 return n >= from && n <= to;
