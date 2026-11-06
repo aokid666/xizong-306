@@ -175,8 +175,8 @@
         while (j < max && pre.charCodeAt(j) === s2.charCodeAt(j)) j++;
         pre = pre.slice(0, j);
       }
-      const cut = Math.max(pre.lastIndexOf('。'), pre.lastIndexOf('？'), pre.lastIndexOf('！'));
-      if (cut > 24) {
+      const cut = Math.max(pre.lastIndexOf('。'), pre.lastIndexOf('？'), pre.lastIndexOf('！'), pre.lastIndexOf('；'), pre.lastIndexOf('，'));
+      if (cut >= 20) {
         item.vignette = pre.slice(0, cut + 1);
         item.tails = item.qs.map(function (q) {
           return (q.stem || '').slice(item.vignette.length).replace(/^[\s，。、；：]+/, '');
