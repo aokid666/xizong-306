@@ -483,7 +483,15 @@
     U.modal({
       title: '订正正确答案 · ' + q.label, body: body, buttons: [
         { label: '取消' },
-        {
+        { label: '无答案', onClick: function () {
+            Store.setKey(q.id, '__none', {
+              label: q.label, subj: q.subj, ans: q.ans || '',
+              stem: (q.stem || '').slice(0, 90)
+            });
+            U.closeModal();
+            U.toast('已标记为「无答案」，这题不参与判分');
+          } },
+          {
           label: '保存', cls: 'primary', onClick: function () {
             const v = Object.keys(picks).filter(function (k) { return picks[k]; }).sort().join('');
             Store.setKey(q.id, v, {
