@@ -165,6 +165,25 @@
   }
 
   function build(item, index, ctx) {
+    // 多小问（病例题/B型题）如果数据里没标出公共题干，这里现场算一次，避免每问都重复整段病例
+    if (item.qs && item.qs.length > 1 && !item.vignette) {
+      let pre = item.qs[0].stem || '';
+      for (let i = 1; i < item.qs.length; i++) {
+        const s2 = item.qs[i].stem || '';
+        let j = 0;
+        const max = Math.min(pre.length, s2.length);
+        while (j < max && pre.charCodeAt(j) === s2.charCodeAt(j)) j++;
+        pre = pre.slice(0, j);
+      }
+      const cut = Math.max(pre.lastIndexOf('。'), pre.lastIndexOf('？'), pre.lastIndexOf('！'));
+      if (cut > 24) {
+        item.vignette = pre.slice(0, cut + 1);
+        item.tails = item.qs.map(function (q) {
+          return (q.stem || '').slice(item.vignette.length).replace(/^[\s，。、；：]+/, '');
+        });
+      }
+    }
+
     const card = document.createElement('article');
     card.className = 'card';
     card.dataset.key = item.key;
