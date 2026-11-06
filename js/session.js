@@ -121,6 +121,7 @@
       '<button class="btn ghost sm" data-tool="sheet">答题卡</button>' +
       '<button class="btn ghost sm" data-tool="submit">' + (S.submitMode === 'single' ? '提交本题' : '提交已做') + '</button>' +
       '<button class="btn ghost sm" data-tool="mode" title="切换提交方式">' + (S.submitMode === 'single' ? '每题' : '整卷') + '</button>' +
+      '<button class="btn ghost sm" data-tool="layout" title="切换滚动/单题">' + (S.mode === 'paged' ? '单题' : '滚动') + '</button>' +
       '<button class="btn ghost sm" data-tool="mode">' + (S.mode === 'scroll' ? '单题模式' : '滚动模式') + '</button>' +
       '<button class="btn ghost sm" data-tool="exit">退出</button>' +
       '</div></div>';
@@ -277,7 +278,16 @@
       if (tool) {
         const k = tool.dataset.tool;
         if (k === 'sheet') openSheet();
-        else if (k === 'mode') {
+        else if (k === 'layout') {
+        S.mode = (S.mode === 'paged') ? 'scroll' : 'paged';
+        Store.set('mode', S.mode);
+        saveSnapshot();
+        document.body.classList.toggle('has-pager', S.mode === 'paged');
+        mount();
+        U.toast(S.mode === 'paged' ? '已切换为：单题（左右切换）' : '已切换为：滚动（纸质版）');
+        return;
+      }
+      else if (k === 'mode') {
         S.submitMode = (S.submitMode === 'single') ? 'all' : 'single';
         Store.set('submitMode', S.submitMode);
         saveSnapshot();
