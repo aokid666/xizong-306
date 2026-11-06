@@ -353,6 +353,11 @@
     if (!ids.length && !done && !Store.key(q0.id)) { row.hidden = true; row.innerHTML = ''; return; }
     row.hidden = false;
     const fixed = !!Store.key(q0.id);
+    if (Store.key(q0.id) === '__none') {
+      row.hidden = false;
+      row.innerHTML = '<button class="link-btn is-on" data-fixkey="1" title="已标记无答案（点此修改）">无答案</button>';
+      return;
+    }
     row.innerHTML = '<button class="link-btn' + (fixed ? ' is-on' : '') + '" data-fixkey="1" title="' +
         (fixed ? '答案已订正（点此再改）' : '矫正这道题的答案') + '">' + (fixed ? '已订正' : '订正') + '</button>' +
       (done ? '<button class="link-btn" data-redo-one="1" title="重做这题">重做</button>' : '') +
