@@ -148,6 +148,13 @@
     /* 用一组题（共用题干）构造 item */
     caseItem(qs, key, cid) {
       const item = { key: key, qs: qs, vignette: '', tails: [], cid: cid || '' };
+      const fx = window.XZ && window.XZ.casefix;
+      if (fx && cid && fx.v[cid]) {
+        item.vignette = fx.v[cid];
+        item.tails = qs.map(function (q) { return fx.t[q.id] || q.stem; });
+        qs.forEach(function (x) { x._item = item; });
+        return item;
+      }
       // 最长公共前缀 -> 题干正文
       let pre = qs[0].stem;
       for (let i = 1; i < qs.length; i++) {
