@@ -247,7 +247,35 @@
     return out;
   }
 
+  function runWith(items, opts) {
+    opts = opts || {};
+    if (!items || !items.length) { U.toast('这里没有题目'); return; }
+    var box = document.getElementById('print-root');
+    var prep = (opts.map !== false && Bank.ensureMaps) ? Bank.ensureMaps().catch(function () { }) : Promise.resolve();
+    prep.then(function () { return loadImages(items); }).catch(function () { return {}; }).then(function (imgs) {
+      var full = {
+        mark: opts.mark !== false, note: opts.note !== false,
+        hw: opts.hw !== false, map: opts.map !== false,
+        withAnswer: !!opts.withAnswer, sort: opts.sort || 'bank'
+      };
+      var arr = opts.sort ? sortItems(items, opts.sort) : items;
+      box.innerHTML = buildPages(arr, full, imgs).join('');
+      document.body.classList.add('printing');
+      var back = function () { document.body.classList.remove('printing'); window.removeEventListener('afterprint', back); };
+      window.addEventListener('afterprint', back);
+      U.toast('共 ' + arr.length + ' 组，正在准备打印…', 2000);
+      var list = Array.prototype.slice.call(box.querySelectorAll('img'));
+      Promise.all(list.map(function (x) {
+        if (x.complete && x.naturalWidth) return Promise.resolve();
+        return new Promise(function (res) { x.onload = x.onerror = function () { res(); }; });
+      })).then(function () {
+        setTimeout(function () { document.getElementById('toast').hidden = true; window.print(); }, 300);
+      });
+    });
+  }
+
   window.ExportUI = {
+    runItems: runWith,
     collect: collect,
     sortItems: sortItems,
     buildPages: buildPages,
