@@ -302,7 +302,7 @@
         if (k === 'sheet') openSheet();
         else if (k === 'export') {
         if (!S.items.length) return;
-        ExportUI.runItems(S.items.slice());
+        exportDialog();
         return;
       }
       else if (k === 'layout') {
@@ -534,6 +534,29 @@
             U.toast(v ? '已保存正确答案 ' + v : '已清除订正');
           }
         }
+      ]
+    });
+  }
+
+  function exportDialog() {
+    const box = U.el('div');
+    box.innerHTML = '<p class="hint" style="margin-bottom:10px">导出当前 ' + S.items.length + ' 组题（' + (S.title || '') + '）</p>' +
+      '<label class="chk"><input type="checkbox" data-ex="mark" checked> 高亮与标注</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="note" checked> 笔记（文字+图片）</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="hw" checked> 手写</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="map" checked> 关联导图</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="ans"> 附答案与解析</label>';
+    U.modal({
+      title: '导出 PDF', body: box, buttons: [
+        { label: '取消' },
+        { label: '开始导出', cls: 'primary', onClick: function () {
+            const g = function (k) { return !!box.querySelector('[data-ex="' + k + '"]').checked; };
+            U.closeModal();
+            ExportUI.runItems(S.items.slice(), {
+              title: S.title || '', mark: g('mark'), note: g('note'),
+              hw: g('hw'), map: g('map'), withAnswer: g('ans'), sort: 'seq'
+            });
+          } }
       ]
     });
   }
