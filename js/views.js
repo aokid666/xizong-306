@@ -101,11 +101,10 @@
     html += '<div style="margin-top:40px" class="hint">提示：病例题（共用题干的多小问）在组题与随机时始终作为一个整体，不会被拆开；提交时也只给一个提交按钮。</div>';
     shell(html);
 
-    setTimeout(function () {
-      const sj = app().querySelector('[data-exp-subj]');
-      if (sj) { sj.addEventListener('change', fillChaps); }
-      fillChaps();
-    }, 0);
+    refreshChaps();
+    app().addEventListener('change', function (e) {
+      if (e.target.matches('[data-exp-subj-cb]')) refreshChaps();
+    });
 
     app().addEventListener('click', function (e) {
       const b = e.target.closest('[data-act]');
@@ -1035,28 +1034,42 @@
       '<label class="chk"><input type="checkbox" data-exp-hw checked> 手写</label>' +
       '<label class="chk"><input type="checkbox" data-exp-map checked> 关联导图</label></div></div>';
     html += '<div class="field"><div class="k">题库</div><div class="v">' +
-      '<select class="select" data-exp-bank><option value="">全部</option>' +
-      '<option value="real">十年真题</option><option value="mock">模拟题</option></select></div></div>';
-    html += '<div class="field"><div class="k">年份</div><div class="v">' +
-      '<select class="select" data-exp-year><option value="">全部年份</option>' +
-      Bank.meta.years.map(function (y) { return '<option value="' + y.y + '">' + y.y + '</option>'; }).reverse().join('') +
-      '</select></div></div>';
-    html += '<div class="field"><div class="k">章节</div><div class="v">' +
-      '<select class="select" data-exp-chap><option value="">全部章节（按所选科目）</option></select>' +
-      '<span class="hint" style="margin-left:8px">先在上面选科目</span></div></div>';
-    html += '<div class="field"><div class="k">分册</div><div class="v">' +
-      '<select class="select" data-exp-subj><option value="">全部科目（一份）</option>' +
+      '<label class="chk"><input type="checkbox" data-exp-bank-cb value="real" checked> 十年真题</label>' +
+      '<label class="chk"><input type="checkbox" data-exp-bank-cb value="mock" checked> 模拟题</label></div></div>';
+    html += '<div class="field"><div class="k">科目</div><div class="v">' +
       ['生理学','生物化学','病理学','内科学','外科学','人文精神'].map(function (x) {
-        return '<option value="' + x + '">只导 ' + x + '</option>';
-      }).join('') + '</select>' +
-      '<span class="hint" style="margin-left:8px">要五本册子就分别导五次（每次一科）</span></div></div>';
+        return '<label class="chk"><input type="checkbox" data-exp-subj-cb value="' + x + '" checked> ' + x + '</label>';
+      }).join('') + '</div></div>';
+    html += '<div class="field"><div class="k">年份</div><div class="v" style="max-height:150px;overflow:auto">' +
+      Bank.meta.years.map(function (y) {
+        return '<label class="chk"><input type="checkbox" data-exp-year-cb value="' + y.y + '" checked> ' + y.y + '</label>';
+      }).join('') + '</div></div>';
+    html += '<div class="field"><div class="k">章节</div><div class="v" style="max-height:200px;overflow:auto" data-exp-chapbox>' +
+      '<span class="hint">不勾＝所选科目的全部章节</span></div></div>';
     html += '<div class="field"><div class="k">数量</div><div class="v">' +
       '<input class="input" type="number" min="1" data-exp-limit placeholder="留空＝全部" style="width:120px"></div></div>';
     html += '<div style="display:flex;gap:12px;margin-top:20px"><button class="btn primary" data-exp-go="1">生成并打印 / 存为 PDF</button>' +
       '<span class="hint">弹出打印窗口后，目标选择「另存为 PDF」即可</span></div>';
     shell(html);
-    let scope = 'all', sort = 'year';
-    function fillChaps() {
+    let scope = 'all', sort = 'bank';
+    function refreshChaps() {
+      const box = app().querySelector('[data-exp-chapbox]');
+      if (!box) return;
+      const subs = Array.prototype.slice.call(app().querySelectorAll('[data-exp-subj-cb]'))
+        .filter(function (x) { return x.checked; }).map(function (x) { return x.value; });
+      let h = '';
+      subs.forEach(function (nm) {
+        const meta = Bank.subjectMeta(nm);
+        if (!meta || !meta.chapters) return;
+        h += '<div class="hint" style="margin:4px 0">' + nm + '</div>';
+        meta.chapters.forEach(function (c, i) {
+          const t = (c.p ? '第' + c.p + '篇 ' : '') + c.t;
+          h += '<label class="chk"><input type="checkbox" data-exp-chap-cb value="' + nm + '|' + i + '"> ' + esc(t) + '</label>';
+        });
+      });
+      box.innerHTML = h || '<span class="hint">先选科目</span>';
+    }
+    function fillChapsOld() {
       const sel = app().querySelector('[data-exp-chap]');
       const subj = (app().querySelector('[data-exp-subj]') || {}).value || '';
       const meta = subj ? Bank.subjectMeta(subj) : null;
@@ -1077,13 +1090,16 @@
         return;
       }
       if (e.target.closest('[data-exp-go]')) {
+        const boxes = function (sel) {
+          return Array.prototype.slice.call(app().querySelectorAll(sel)).filter(function (x) { return x.checked; }).map(function (x) { return x.value; });
+        };
         loadThen(Bank.subjectNames(), function () {
           ExportUI.run({
             scope: scope, sort: sort,
-            subj: (app().querySelector('[data-exp-subj]') || {}).value || '',
-            year: (app().querySelector('[data-exp-year]') || {}).value || '',
-            bank: (app().querySelector('[data-exp-bank]') || {}).value || '',
-            chap: (app().querySelector('[data-exp-chap]') || {}).value || '',
+            banks: boxes('[data-exp-bank-cb]'),
+            subjects: boxes('[data-exp-subj-cb]'),
+            years: boxes('[data-exp-year-cb]'),
+            chaps: boxes('[data-exp-chap-cb]'),
             mark: !!app().querySelector('[data-exp-anno]').checked,
             note: !!app().querySelector('[data-exp-note]').checked,
             hw: !!app().querySelector('[data-exp-hw]').checked,
