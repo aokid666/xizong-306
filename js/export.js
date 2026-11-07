@@ -14,6 +14,7 @@
         if (scope === 'wrong') { const p = Store.prog(q.id); if (!p || p.ok) return; }
         if (scope === 'flag' && !Store.flag(q.id)) return;
         if (scope === 'new') { if (Store.prog(q.id)) return; }
+        if (scope === 'done') { if (!Store.prog(q.id)) return; }
         items.push(q);
       });
     });
@@ -37,6 +38,12 @@
         const cb = Bank.chapterMeta(b.qs[0].subj, b.qs[0].ci) || { t: '' };
         return (a.qs[0].subj || '').localeCompare(b.qs[0].subj || '') ||
           String(ca.t).localeCompare(String(cb.t)) || (a.qs[0].n - b.qs[0].n);
+      });
+    } else if (by === 'bank') {
+      arr.sort(function (a, b) {
+        const am = a.qs[0].mock ? 1 : 0, bm = b.qs[0].mock ? 1 : 0;
+        if (am !== bm) return am - bm;
+        return (b.qs[0].y || 0) - (a.qs[0].y || 0) || (a.qs[0].n - b.qs[0].n);
       });
     } else {
       arr.sort(function (a, b) { return (a.qs[0].subj || '').localeCompare(b.qs[0].subj || ''); });
