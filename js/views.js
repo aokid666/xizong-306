@@ -101,11 +101,6 @@
     html += '<div style="margin-top:40px" class="hint">提示：病例题（共用题干的多小问）在组题与随机时始终作为一个整体，不会被拆开；提交时也只给一个提交按钮。</div>';
     shell(html);
 
-    refreshChaps();
-    app().addEventListener('change', function (e) {
-      if (e.target.matches('[data-exp-subj-cb]')) refreshChaps();
-    });
-
     app().addEventListener('click', function (e) {
       const b = e.target.closest('[data-act]');
       if (!b) return;
@@ -1061,6 +1056,10 @@
       '<span class="hint">弹出打印窗口后，目标选择「另存为 PDF」即可</span></div>';
     shell(html);
     let scope = 'all', sort = 'bank';
+    refreshChaps();
+    app().addEventListener('change', function (e) {
+      if (e.target.matches('[data-exp-subj-cb]')) refreshChaps();
+    });
     function refreshChaps() {
       const box = app().querySelector('[data-exp-chapbox]');
       if (!box) return;
