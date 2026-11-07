@@ -637,6 +637,12 @@
       const b = U.el('button', { class: 'btn sm' + (cur && cur.t === t ? ' on' : '') }, t ? Card.FLAGS[t] : '清除标记');
       b.addEventListener('click', function () {
         Store.setFlag(qid, t || null);
+        if (t === 'noanswer') {
+          const q = Bank.q(qid) || {};
+          Store.setKey(qid, '__none', { label: q.label || '', subj: q.subj || '', ans: q.ans || '', stem: (q.stem || '').slice(0, 90) });
+        } else if (Store.key(qid) === '__none') {
+          Store.setKey(qid, '');
+        }
         U.closeModal();
         if (done) done();
         U.toast(t ? '已标记为「' + Card.FLAGS[t] + '」' : '已清除标记');
