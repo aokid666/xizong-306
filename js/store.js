@@ -562,6 +562,15 @@
       Store.save();
     },
 
+    /* 每题手动指定的导图页 */
+    mapFix(qid) { return (Store.doc.mapFix || {})[qid] || null; },
+    setMapFix(qid, pages) {
+      Store.doc.mapFix = Store.doc.mapFix || {};
+      if (pages && pages.length) Store.doc.mapFix[qid] = pages.slice();
+      else delete Store.doc.mapFix[qid];
+      Store.save();
+    },
+
     /* 收藏文件夹 */
     folders() { return Store.doc.folders || []; },
     addFolder(name) {
