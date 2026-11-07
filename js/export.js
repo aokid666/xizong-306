@@ -56,7 +56,7 @@
       return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#1a1a1a" stroke-width="' +
         (st.w || 3) + '" stroke-linecap="round" stroke-linejoin="round"/>';
     }).join('');
-    return '<svg class="pg-hwover" viewBox="0 0 ' + w + ' ' + hh + '" preserveAspectRatio="none">' + parts + '</svg>';
+    return '<svg class="pg-hwover" viewBox="0 0 ' + w + ' ' + hh + '" preserveAspectRatio="xMinYMin meet">' + parts + '</svg>';
   }
 
   /* ---------- 笔记 ---------- */
