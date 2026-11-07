@@ -696,3 +696,27 @@ html[data-theme="dark"] mark.hl.c5{background:#3d2c4a;color:#f1e9f7}
   .topbar,.session-bar,.pager,.card-acts,.hw-tools,.foot{display:none!important}
   .card{break-inside:avoid;border-bottom:1px solid #ddd}
 }
+
+
+/* ---------- 导出打印 ---------- */
+#print-root{display:none}
+body.printing #print-root{display:block;background:#fff}
+body.printing header.topbar,body.printing main#app,body.printing footer,body.printing .session-bar,body.printing .pager{display:none!important}
+.pg{position:relative;padding:6mm 2mm;font-size:11.5pt;line-height:1.75;color:#000}
+.pg-hd{font-size:9pt;color:#666;border-bottom:1px solid #ddd;padding-bottom:2mm;margin-bottom:3mm}
+.pg-vig{margin-bottom:3mm}
+.pg-q{margin:2mm 0 2mm}
+.pg-opts>div{margin:1mm 0;padding-left:4mm}
+.pg-ans{margin-top:3mm;font-size:10pt}
+.pg-exp{margin-top:2mm;font-size:9.5pt;color:#333}
+.pg-ft{position:absolute;bottom:0;right:0;font-size:8.5pt;color:#999}
+.pg-star{position:absolute;top:0}
+.pg-star.r{right:0}
+.pg-star.l{left:0}
+@media print{
+  @page{size:A4;margin:14mm 12mm}
+  html,body{background:#fff}
+  body.printing #print-root{display:block}
+  .pg{break-after:page;page-break-after:always}
+  .pg:last-child{break-after:auto;page-break-after:auto}
+}
