@@ -45,6 +45,20 @@
       '<svg viewBox="0 0 ' + w + ' ' + (bh * scale) + '" width="' + w + '">' + parts + '</svg></div>';
   }
 
+  /* 手写覆盖层：和答题界面一样压在题目上 */
+  function hwOverlay(qid) {
+    var d = Store.hw(qid);
+    if (!d || !d.s || !d.s.length) return '';
+    var w = d.w || 800, hh = d.h || 400;
+    var parts = d.s.map(function (st) {
+      var p = st.p || [], pts = [];
+      for (var i = 0; i + 1 < p.length; i += 2) pts.push(p[i] + ',' + p[i + 1]);
+      return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#1a1a1a" stroke-width="' +
+        (st.w || 3) + '" stroke-linecap="round" stroke-linejoin="round"/>';
+    }).join('');
+    return '<svg class="pg-hwover" viewBox="0 0 ' + w + ' ' + hh + '" preserveAspectRatio="none">' + parts + '</svg>';
+  }
+
   /* ---------- 笔记 ---------- */
   function noteHTML(qid, imgs) {
     var n = Store.note(qid);
@@ -66,7 +80,7 @@
     if (!pages.length) return '';
     var p = pages[0];
     return '<div class="pg-map"><div class="pg-lab">关联导图 · 第 ' + p.n + ' 页</div>' +
-      '<img src="https://aokid666.github.io/xizong-lec/' + p.img.split('/').pop() + '" class="map-img"></div>';
+      '<img src="data/maps/' + p.img + '" class="map-img"></div>';
   }
 
   /* ---------- 收集 ---------- */
@@ -132,6 +146,7 @@
     var h = '<section class="pg' + (fav ? ' fav' : '') + '">';
     if (fav) h += '<div class="pg-star ' + (odd ? 'r' : 'l') + '">' + starSvg() + '</div>';
     h += '<div class="pg-hd">' + esc(head) + '</div>';
+    h += '<div class="pg-body">';
     if (item.vignette) h += '<div class="pg-vig">' + esc(item.vignette) + '</div>';
 
     var fnotes = [];
@@ -155,8 +170,8 @@
         }
       }
       if (opts.note) h += noteHTML(q.id, imgs);
-      if (opts.hw) h += hwSvg(q.id, 560);
     });
+    h += hwOverlay(q0.id) + '</div>';
     if (opts.map) h += mapHTML(q0);
     if (fnotes.length) {
       h += '<div class="pg-fn"><div class="pg-lab">标注</div>' + fnotes.map(function (n, i) {
