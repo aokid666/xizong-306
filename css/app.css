@@ -693,6 +693,7 @@ html[data-theme="dark"] mark.hl.c5{background:#3d2c4a;color:#f1e9f7}
   .card-acts{gap:4px}
 }
 @media print{
+  .toast,.float-tools,.zoom-ov{display:none!important}
   .topbar,.session-bar,.pager,.card-acts,.hw-tools,.foot{display:none!important}
   .card{break-inside:avoid;border-bottom:1px solid #ddd}
 }
