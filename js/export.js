@@ -86,9 +86,19 @@
   /* ---------- 收集 ---------- */
   function collect(scope, f) {
     f = f || {};
+    var SS = (f.subjects && f.subjects.length) ? new Set(f.subjects) : null;
+    var YY = (f.years && f.years.length) ? new Set(f.years.map(String)) : null;
+    var BB = (f.banks && f.banks.length) ? new Set(f.banks) : null;
+    var CC = (f.chaps && f.chaps.length) ? new Set(f.chaps) : null;
     var items = [];
     function pick(q) {
-      if (f.subj && q.subj !== f.subj) return;
+      if (SS && !SS.has(q.subj)) return;
+      if (CC && !CC.has(q.subj + '|' + q.ci)) return;
+      if (YY && q.y && !YY.has(String(q.y))) return;
+      if (BB) {
+        if (!q.mock && !BB.has('real')) return;
+        if (q.mock && !BB.has('mock')) return;
+      }
       if (f.year && String(q.y) !== String(f.year)) return;
       if (f.bank === 'real' && q.mock) return;
       if (f.bank === 'mock' && !q.mock) return;
@@ -207,14 +217,29 @@
     var out = [], lastKey = '', part = 0;
     items.forEach(function (it, i) {
       var q0 = it.qs[0];
-      var key = (q0.mock ? 'M|' + (q0.set || '模拟') : 'R|' + (q0.subj || ''));
+      var chapM = q0.mock ? null : Bank.chapterMeta(q0.subj, q0.ci);
+      var key, title;
+      if (opts.sort === 'year') {
+        key = 'Y' + (q0.y || 0);
+        title = '第 ' + (part + 1) + ' 部分 · ' + (q0.y || '') + ' 年';
+      } else if (opts.sort === 'chapter') {
+        key = (q0.mock ? 'M' : (q0.subj || '')) + '|' + (q0.ci || 0);
+        title = '第 ' + (part + 1) + ' 部分 · ' + (q0.subj || '') + (chapM ? ' · ' + (chapM.p ? '第' + chapM.p + '篇 ' : '') + chapM.t : '');
+      } else if (opts.sort === 'subject') {
+        key = q0.mock ? 'M' : (q0.subj || '');
+        title = '第 ' + (part + 1) + ' 部分 · ' + (q0.mock ? '模拟题' : (q0.subj || ''));
+      } else {
+        key = (q0.mock ? 'M|' + (q0.set || '模拟') : 'R|' + (q0.subj || ''));
+        title = q0.mock ? ('第 ' + (part + 1) + ' 部分 · 模拟题 · ' + (q0.set || ''))
+          : ('第 ' + (part + 1) + ' 部分 · 真题 · ' + (q0.subj || ''));
+      }
       if (key !== lastKey) {
         lastKey = key;
         part++;
-        var title = q0.mock ? ('第 ' + part + ' 部分 · 模拟题 · ' + (q0.set || ''))
-          : ('第 ' + part + ' 部分 · 真题 · ' + (q0.subj || ''));
-        var sub = q0.mock ? '' : ('1988–2026 · 共 ' +
-          items.filter(function (x) { return !x.qs[0].mock && x.qs[0].subj === q0.subj; }).length + ' 题');
+        title = title.replace('第 ' + (part - 1 + 1) + ' 部分', '第 ' + part + ' 部分');
+        var sub = q0.mock ? '' : ('共 ' + items.filter(function (x) {
+          return !x.qs[0].mock && x.qs[0].subj === q0.subj && (!chapM || String(x.qs[0].ci) === String(q0.ci));
+        }).length + ' 题');
         out.push(dividerHTML(title, sub));
       }
       out.push(pageHTML(it, i, opts, imgs || {}));
