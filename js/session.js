@@ -523,7 +523,17 @@
     b2.addEventListener('click', function () { U.closeModal(); MapUI.openForQuestion(item, 'inline'); });
     row.appendChild(b1); row.appendChild(b2);
     body.appendChild(row);
-    U.modal({ title: '思维导图', body: body, buttons: [{ label: '关闭' }] });
+    U.modal({
+      title: '思维导图', body: body, buttons: [
+        {
+          label: '修改关联页', onClick: function () {
+            U.closeModal();
+            mapPickDialog(q);
+          }
+        },
+        { label: '关闭', cls: 'primary' }
+      ]
+    });
 
     const hint = body.querySelector('[data-mp-hint]');
     Bank.ensureMaps().then(function () {
@@ -536,6 +546,39 @@
       }
     }).catch(function () {
       hint.textContent = '导图载入失败';
+    });
+  }
+
+  function mapPickDialog(q) {
+    const m = window.XZ && window.XZ.maps;
+    if (!m) { U.toast('导图还没载入'); return; }
+    const cur = Store.mapFix(q.id) || [];
+    const body = U.el('div');
+    body.innerHTML = '<p class="hint" style="margin-bottom:10px">当前：' +
+      (cur.length ? ('第 ' + cur.join('、') + ' 页') : '按科目+章节自动匹配') + '</p>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      '<input class="input" data-mp-in type="number" min="1" max="' + m.pages.length + '" placeholder="页码" style="width:90px">' +
+      '<span class="hint">/ ' + m.pages.length + ' 页</span>' +
+      '<button class="btn sm" data-mp-set="1">设为这一页</button>' +
+      '<button class="btn ghost sm" data-mp-clear="1">恢复自动匹配</button></div>';
+    U.modal({
+      title: '修改导图关联 · ' + (q.label || ''),
+      body: body, buttons: [{ label: '关闭' }]
+    });
+    body.addEventListener('click', function (e) {
+      if (e.target.closest('[data-mp-set]')) {
+        const n = parseInt((body.querySelector('[data-mp-in]') || {}).value, 10);
+        if (!n || n < 1 || n > m.pages.length) { U.toast('页码不合法'); return; }
+        Store.setMapFix(q.id, [n]);
+        U.closeModal();
+        U.toast('已关联到第 ' + n + ' 页');
+        return;
+      }
+      if (e.target.closest('[data-mp-clear]')) {
+        Store.setMapFix(q.id, null);
+        U.closeModal();
+        U.toast('已恢复自动匹配');
+      }
     });
   }
 
