@@ -9,7 +9,7 @@
   function renderMarked(text, marks) {
     text = text || '';
     var list = (marks || []).slice().sort(function (a, b) { return a.s - b.s; });
-    if (!list.length) return esc(text);
+    if (!list.length) return { html: esc(text), notes: [] };
     var out = '', pos = 0, notes = [];
     list.forEach(function (m) {
       if (m.s < pos) return;
@@ -70,10 +70,15 @@
   }
 
   /* ---------- 收集 ---------- */
-  function collect(scope, subj) {
+  function collect(scope, f) {
+    f = f || {};
     var items = [];
     function pick(q) {
-      if (subj && q.subj !== subj) return;
+      if (f.subj && q.subj !== f.subj) return;
+      if (f.year && String(q.y) !== String(f.year)) return;
+      if (f.bank === 'real' && q.mock) return;
+      if (f.bank === 'mock' && !q.mock) return;
+      if (f.chap && String(q.ci) !== String(f.chap)) return;
       if (scope === 'fav' && !Store.isFav(q.id)) return;
       if (scope === 'wrong') { var p = Store.prog(q.id); if (!p || p.ok) return; }
       if (scope === 'flag' && !Store.flag(q.id)) return;
@@ -132,11 +137,11 @@
     var fnotes = [];
     item.qs.forEach(function (q, i) {
       var tail = (item.vignette && item.tails && item.tails[i] != null) ? item.tails[i] : q.stem;
-      var r = renderMarked(tail, marksOf(q.id, 'stem'));
+      var r = renderMarked(tail, opts.mark ? marksOf(q.id, 'stem') : []);
       var html = r.html; fnotes = fnotes.concat(r.notes || []);
       h += '<div class="pg-q">' + (item.qs.length > 1 ? '<b>' + (i + 1) + '．</b>' : '') + html + '</div>';
       h += '<div class="pg-opts">' + (q.opts || []).map(function (o) {
-        var rr = renderMarked(o.v, marksOf(q.id, 'opt' + o.k));
+        var rr = renderMarked(o.v, opts.mark ? marksOf(q.id, 'opt' + o.k) : []);
         (rr.notes || []).forEach(function (n) { fnotes.push(n); });
         return '<div><span class="k">' + esc(o.k) + '．</span>' +
           (typeof rr === 'string' ? esc(o.v) : rr.html) + '</div>';
@@ -144,17 +149,15 @@
       if (opts.withAnswer) {
         h += '<div class="pg-ans">答案：' + esc(Bank.truth(q) || '（无）') + '</div>';
         if (q.exp) {
-          var re = renderMarked(q.exp, marksOf(q.id, 'exp'));
+          var re = renderMarked(q.exp, opts.mark ? marksOf(q.id, 'exp') : []);
           (re.notes || []).forEach(function (n) { fnotes.push(n); });
           h += '<div class="pg-exp">解析：' + (typeof re === 'string' ? esc(q.exp) : re.html) + '</div>';
         }
       }
-      if (opts.withAnno) {
-        h += noteHTML(q.id, imgs);
-        h += hwSvg(q.id, 560);
-      }
+      if (opts.note) h += noteHTML(q.id, imgs);
+      if (opts.hw) h += hwSvg(q.id, 560);
     });
-    if (opts.withAnno) h += mapHTML(q0);
+    if (opts.map) h += mapHTML(q0);
     if (fnotes.length) {
       h += '<div class="pg-fn"><div class="pg-lab">标注</div>' + fnotes.map(function (n, i) {
         return '<div>' + (i + 1) + '．' + esc(n) + '</div>';
@@ -209,7 +212,7 @@
     sortItems: sortItems,
     buildPages: buildPages,
     run: function (opts) {
-      var items = collect(opts.scope, opts.subj);
+      var items = collect(opts.scope, opts);
       if (!items.length) { U.toast('这个范围里没有题目'); return; }
       items = sortItems(items, opts.sort);
       if (opts.limit) items = items.slice(0, opts.limit);
@@ -225,8 +228,8 @@
         U.toast('共 ' + items.length + ' 题，正在打开打印窗口…', 3000);
         setTimeout(function () { window.print(); }, 400);
       };
-      if (opts.withAnno) {
-        U.toast('正在整理笔记与手写…', 2000);
+      if (opts.note) {
+        U.toast('正在整理笔记…', 2000);
         loadImages(items).then(go).catch(function () { go({}); });
       } else {
         go({});
