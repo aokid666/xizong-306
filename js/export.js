@@ -232,6 +232,13 @@
       items = sortItems(items, opts.sort);
       if (opts.limit) items = items.slice(0, opts.limit);
       var box = document.getElementById('print-root');
+      var waitImgs = function (im) {
+        var list = Array.prototype.slice.call(im.querySelectorAll('img'));
+        return Promise.all(list.map(function (x) {
+          if (x.complete && x.naturalWidth) return Promise.resolve();
+          return new Promise(function (res) { x.onload = x.onerror = function () { res(); }; });
+        }));
+      };
       var go = function (imgs) {
         box.innerHTML = buildPages(items, opts, imgs).join('');
         document.body.classList.add('printing');
@@ -240,14 +247,16 @@
           window.removeEventListener('afterprint', back);
         };
         window.addEventListener('afterprint', back);
-        U.toast('共 ' + items.length + ' 题，正在打开打印窗口…', 3000);
-        setTimeout(function () { window.print(); }, 400);
+        U.toast('共 ' + items.length + ' 题，正在准备打印…', 2000);
+        Promise.all([waitImgs(box), new Promise(function (r) { setTimeout(r, 300); })])
+          .then(function () { document.getElementById('toast').hidden = true; window.print(); });
       };
+      var prep = (opts.map && Bank.ensureMaps) ? Bank.ensureMaps().catch(function () { }) : Promise.resolve();
       if (opts.note) {
-        U.toast('正在整理笔记…', 2000);
-        loadImages(items).then(go).catch(function () { go({}); });
+        U.toast('正在整理笔记与图片…', 2000);
+        prep.then(function () { return loadImages(items); }).then(go).catch(function () { go({}); });
       } else {
-        go({});
+        prep.then(function () { go({}); }).catch(function () { go({}); });
       }
     }
   };
