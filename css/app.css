@@ -703,6 +703,9 @@ html[data-theme="dark"] mark.hl.c5{background:#3d2c4a;color:#f1e9f7}
 body.printing #print-root{display:block;background:#fff}
 body.printing header.topbar,body.printing main#app,body.printing footer,body.printing .session-bar,body.printing .pager{display:none!important}
 .pg{position:relative;padding:6mm 2mm;font-size:11.5pt;line-height:1.75;color:#000}
+.pg.divider{display:flex;flex-direction:column;align-items:center;justify-content:center;height:250mm;text-align:center}
+.pg.divider .dv-t{font-size:22pt;font-weight:600;letter-spacing:2px}
+.pg.divider .dv-s{margin-top:6mm;font-size:10pt;color:#666}
 .pg-hd{font-size:9pt;color:#666;border-bottom:1px solid #ddd;padding-bottom:2mm;margin-bottom:3mm}
 .pg-vig{margin-bottom:3mm}
 .pg-q{margin:2mm 0 2mm}
