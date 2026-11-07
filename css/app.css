@@ -723,3 +723,13 @@ body.printing header.topbar,body.printing main#app,body.printing footer,body.pri
   .pg{break-after:page;page-break-after:always}
   .pg:last-child{break-after:auto;page-break-after:auto}
 }
+
+.pg-lab{font-size:8.5pt;color:#888;margin:2mm 0 1mm}
+.pg-note,.pg-hw,.pg-map,.pg-fn{margin-top:3mm;border-top:1px dashed #ddd;padding-top:2mm}
+.pg-note .nb-t{font-size:10pt;white-space:pre-wrap}
+.pg-note img,.pg-map img{max-width:100%;margin-top:1mm}
+.pg-map img{max-height:90mm;object-fit:contain}
+.pg-fn div{font-size:9pt;color:#333;margin:0.5mm 0}
+.mk-hl{background:#ffe98a;padding:0 1px}
+.mk-ul{text-decoration:underline;text-decoration-color:#3b6fd4}
+sup.fn{font-size:6.5pt;color:#3b6fd4;vertical-align:super}
