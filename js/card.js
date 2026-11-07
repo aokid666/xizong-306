@@ -360,6 +360,7 @@
     }
     row.innerHTML = '<button class="link-btn' + (fixed ? ' is-on' : '') + '" data-fixkey="1" title="' +
         (fixed ? '答案已订正（点此再改）' : '矫正这道题的答案') + '">' + (fixed ? '已订正' : '订正') + '</button>' +
+      '<button class="link-btn' + (Store.fbGet(q0.id) ? ' is-on' : '') + '" data-fb="1" title="这题有问题">反馈</button>' +
       (done ? '<button class="link-btn" data-redo-one="1" title="重做这题">重做</button>' : '') +
       (ids.length ? '<span class="hint">关联</span>' : '') + ids.map(function (id) {
       const q = Bank.q(id);
