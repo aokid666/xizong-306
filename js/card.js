@@ -5,9 +5,9 @@
   'use strict';
 
   const FLAGS = {
-    outdated: '过时', dispute: '争议', bad: '烂题', extra: '超纲', review: '待复习'
+    outdated: '过时', dispute: '争议', bad: '烂题', extra: '超纲', review: '待复习', noanswer: '无答案'
   };
-  const FLAG_ORDER = ['outdated', 'dispute', 'bad', 'extra', 'review'];
+  const FLAG_ORDER = ['outdated', 'dispute', 'bad', 'extra', 'review', 'noanswer'];
   const esc = U.esc;
 
   /* ---------------- 划线 / 高亮渲染 ---------------- */
