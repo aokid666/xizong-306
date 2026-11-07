@@ -1017,9 +1017,10 @@
     html += '<div class="page-hd"><h1>导出 PDF</h1><div class="sub">一题一面 A4；内容过长时这一题独占续页。收藏题会在纸角打红色五角星。</div></div>';
     html += '<div class="field"><div class="k">范围</div><div class="v">' +
       '<div class="seg" data-exp="scope"><button data-v="all" class="on">全部</button><button data-v="fav">只收藏</button>' +
-      '<button data-v="wrong">只错题</button><button data-v="flag">只标记</button><button data-v="new">未做</button></div></div></div>';
+      '<button data-v="wrong">只错题</button><button data-v="flag">只标记</button><button data-v="done">已做</button><button data-v="new">未做</button></div></div></div>';
     html += '<div class="field"><div class="k">排序</div><div class="v">' +
-      '<div class="seg" data-exp="sort"><button data-v="year" class="on">按年份</button><button data-v="chapter">按章节</button><button data-v="subject">按科目</button></div></div></div>';
+      '<div class="seg" data-exp="sort"><button data-v="bank" class="on">按题库</button><button data-v="year">按年份</button><button data-v="chapter">按章节</button><button data-v="subject">按科目</button></div>' +
+      '<span class="hint" style="margin-left:8px">按题库＝先真题（年份倒序）后模拟题</span></div></div>';
     html += '<div class="field"><div class="k">内容</div><div class="v">' +
       '<label class="chk"><input type="checkbox" data-exp-ans> 附带答案与解析</label></div></div>';
     html += '<div class="field"><div class="k">数量</div><div class="v">' +
