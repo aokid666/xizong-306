@@ -562,6 +562,16 @@
       Store.save();
     },
 
+    /* 题目反馈（“这题有问题”） */
+    fbGet(qid) { return (Store.doc.feedback || {})[qid] || null; },
+    fbSet(qid, txt) {
+      Store.doc.feedback = Store.doc.feedback || {};
+      if (txt === null) delete Store.doc.feedback[qid];
+      else Store.doc.feedback[qid] = { t: Date.now(), n: txt || '' };
+      Store.save();
+    },
+    fbAll() { return Store.doc.feedback || {}; },
+
     /* 每题手动指定的导图页 */
     mapFix(qid) { return (Store.doc.mapFix || {})[qid] || null; },
     setMapFix(qid, pages) {
