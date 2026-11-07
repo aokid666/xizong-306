@@ -25,8 +25,18 @@
     return { html: out, notes: notes };
   }
 
-  function marksOf(qid, field) {
-    return Store.marks(qid).filter(function (m) { return m.f === field; });
+  function marksOf(qid, field, text) {
+    var list = Store.marks(qid).filter(function (m) { return m.f === field; });
+    if (!text) return list;
+    return list.map(function (m) {
+      var s0 = m.s, e0 = m.e;
+      if (e0 > text.length || text.slice(s0, e0) !== m.tx) {
+        var idx = m.tx ? text.indexOf(m.tx) : -1;
+        if (idx >= 0) { s0 = idx; e0 = idx + m.tx.length; }
+        else { s0 = Math.min(s0, text.length); e0 = Math.min(e0, text.length); }
+      }
+      return { i: m.i, s: s0, e: e0, k: m.k, n: m.n, tx: m.tx };
+    }).filter(function (m) { return m.e > m.s; });
   }
 
   /* ---------- 手写：转成 SVG（矢量，打印清晰） ---------- */
@@ -150,7 +160,7 @@
     var fav = Store.isFav(q0.id);
     var odd = (idx % 2 === 0);
     var chap = q0.mock ? null : Bank.chapterMeta(q0.subj, q0.ci);
-    var bankName = q0.mock ? '模拟题' : '十年真题';
+    var bankName = opts.title ? opts.title : (q0.mock ? '模拟题' : '十年真题');
     var head = '【' + bankName + (q0.y ? ' · ' + q0.y : '') + '】' + (q0.label || '') +
       ' · ' + (q0.subj || '') + (chap ? ' · ' + (chap.p ? '第' + chap.p + '篇 ' : '') + chap.t : '');
     var h = '<section class="pg' + (fav ? ' fav' : '') + '">';
@@ -162,11 +172,11 @@
     var fnotes = [];
     item.qs.forEach(function (q, i) {
       var tail = (item.vignette && item.tails && item.tails[i] != null) ? item.tails[i] : q.stem;
-      var r = renderMarked(tail, opts.mark ? marksOf(q.id, 'stem') : []);
+      var r = renderMarked(tail, opts.mark ? marksOf(q.id, 'stem', tail) : []);
       var html = r.html; fnotes = fnotes.concat(r.notes || []);
       h += '<div class="pg-q">' + (item.qs.length > 1 ? '<b>' + (i + 1) + '．</b>' : '') + html + '</div>';
       h += '<div class="pg-opts">' + (q.opts || []).map(function (o) {
-        var rr = renderMarked(o.v, opts.mark ? marksOf(q.id, 'opt' + o.k) : []);
+        var rr = renderMarked(o.v, opts.mark ? marksOf(q.id, 'opt' + o.k, o.v) : []);
         (rr.notes || []).forEach(function (n) { fnotes.push(n); });
         return '<div><span class="k">' + esc(o.k) + '．</span>' +
           (typeof rr === 'string' ? esc(o.v) : rr.html) + '</div>';
@@ -174,7 +184,7 @@
       if (opts.withAnswer) {
         h += '<div class="pg-ans">答案：' + esc(Bank.truth(q) || '（无）') + '</div>';
         if (q.exp) {
-          var re = renderMarked(q.exp, opts.mark ? marksOf(q.id, 'exp') : []);
+          var re = renderMarked(q.exp, opts.mark ? marksOf(q.id, 'exp', q.exp) : []);
           (re.notes || []).forEach(function (n) { fnotes.push(n); });
           h += '<div class="pg-exp">解析：' + (typeof re === 'string' ? esc(q.exp) : re.html) + '</div>';
         }
@@ -258,7 +268,7 @@
         hw: opts.hw !== false, map: opts.map !== false,
         withAnswer: !!opts.withAnswer, sort: opts.sort || 'bank'
       };
-      var arr = opts.sort ? sortItems(items, opts.sort) : items;
+      var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
       box.innerHTML = buildPages(arr, full, imgs).join('');
       document.body.classList.add('printing');
       var back = function () { document.body.classList.remove('printing'); window.removeEventListener('afterprint', back); };
