@@ -249,6 +249,27 @@
         if (kind === 'link') { linkDialog(item); return; }
       }
 
+      const fbBtn = t.closest('[data-fb]');
+      if (fbBtn) {
+        const ce = fbBtn.closest('.card');
+        const q0 = ce && ce._item && ce._item.qs[0];
+        if (!q0) return;
+        const cur = Store.fbGet(q0.id);
+        const box = U.el('div');
+        box.innerHTML = '<p class="hint" style="margin-bottom:8px">觉得这题有问题（答案/题干/解析/配图），记一句，之后在「反馈」页统一查看。</p>';
+        const ta = U.el('textarea', { class: 'input', style: 'width:100%;height:80px' });
+        ta.value = cur ? cur.n : '';
+        box.appendChild(ta);
+        U.modal({
+          title: '反馈 · ' + (q0.label || ''), body: box, onOpen: function () { ta.focus(); },
+          buttons: [
+            { label: '取消' },
+            { label: '取消反馈', onClick: function () { Store.fbSet(q0.id, null); U.toast('已取消反馈'); } },
+            { label: '保存', cls: 'primary', onClick: function () { Store.fbSet(q0.id, ta.value.trim()); U.toast('已记录'); } }
+          ]
+        });
+        return;
+      }
       const fixKey = t.closest('[data-fixkey]');
       if (fixKey) {
         const ce = fixKey.closest('.card');
