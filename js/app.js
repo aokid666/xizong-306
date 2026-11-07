@@ -43,6 +43,7 @@
     if (hash === '#/lists') return Views.lists();
     if (hash === '#/stats') return Views.stats();
     if (hash === '#/keys') return Views.keys();
+    if (hash === '#/export') return Views.export();
     if (hash === '#/settings') return Views.settings();
     if (hash.indexOf('#/search/') === 0) return Views.search(decodeURIComponent(hash.slice('#/search/'.length)));
     Views.home();
