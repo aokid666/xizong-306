@@ -1023,6 +1023,9 @@
       '<span class="hint" style="margin-left:8px">按题库＝先真题（年份倒序）后模拟题</span></div></div>';
     html += '<div class="field"><div class="k">内容</div><div class="v">' +
       '<label class="chk"><input type="checkbox" data-exp-ans> 附带答案与解析</label></div></div>';
+    html += '<div class="field"><div class="k">批注</div><div class="v">' +
+      '<label class="chk"><input type="checkbox" data-exp-anno checked> 带上高亮/标注、笔记、手写、关联导图</label>' +
+      '</div></div>';
     html += '<div class="field"><div class="k">分册</div><div class="v">' +
       '<select class="select" data-exp-subj><option value="">全部科目（一份）</option>' +
       ['生理学','生物化学','病理学','内科学','外科学','人文精神'].map(function (x) {
@@ -1051,6 +1054,7 @@
             scope: scope, sort: sort,
             subj: (app().querySelector('[data-exp-subj]') || {}).value || '',
             withAnswer: !!app().querySelector('[data-exp-ans]').checked,
+            withAnno: !!app().querySelector('[data-exp-anno]').checked,
             limit: parseInt((app().querySelector('[data-exp-limit]') || {}).value, 10) || 0
           });
         });
