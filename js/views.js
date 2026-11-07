@@ -862,7 +862,14 @@
           });
           return;
         }
-        const rdo = ev.target.closest('[data-redo-list]');
+        const exl = ev.target.closest('[data-exp-list]');
+      if (exl) {
+        const its = box._items || [];
+        if (!its.length) return;
+        ExportUI.runItems(its, { sort: 'bank' });
+        return;
+      }
+      const rdo = ev.target.closest('[data-redo-list]');
         if (!rdo || !box._items || !box._items.length) return;
         redoConfirm(box._items, rdo.dataset.redoList === 'wrong' ? '错题' : '收藏', box._items.length + ' 组');
       };
@@ -896,6 +903,8 @@
       box.innerHTML = (items.length
           ? '<div class="list-tools" style="margin-bottom:10px"><button class="btn redo sm" data-redo-list="' + tab + '">重做这 ' + items.length + ' 组</button>' +
             '<span class="hint">重做期间不显示原有笔记/手写/高亮，提交后才显示，也不影响原来的正误记录</span></div>'
+          : '') +
+        (items.length ? '<div class="list-tools" style="margin-bottom:10px"><button class="btn sm" data-exp-list="' + tab + '">导出这 ' + items.length + ' 组为 PDF</button></div>'
           : '') +
         folderBar + '<div class="list result-list">' + items.map(function (it, i) {
         const q = it.qs[0];
