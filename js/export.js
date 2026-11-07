@@ -6,10 +6,11 @@
 
   function esc(s) { return U.esc(s); }
 
-  function collect(scope) {
+  function collect(scope, subj) {
     const items = [];
     Bank.subjectNames().forEach(function (n) {
       (Bank.loaded[n] || []).forEach(function (q) {
+        if (subj && q.subj !== subj) return;
         if (scope === 'fav' && !Store.isFav(q.id)) return;
         if (scope === 'wrong') { const p = Store.prog(q.id); if (!p || p.ok) return; }
         if (scope === 'flag' && !Store.flag(q.id)) return;
@@ -62,8 +63,11 @@
     const odd = (idx % 2 === 0);
     let h = '<section class="pg' + (fav ? ' fav' : '') + '">';
     if (fav) h += '<div class="pg-star ' + (odd ? 'r' : 'l') + '">' + starSvg() + '</div>';
-    h += '<div class="pg-hd">' + esc(q0.label || '') + (q0.mock ? ' · 模拟题' : '') +
-      ' · ' + esc(q0.subj || '') + '</div>';
+    const chap = q0.mock ? null : Bank.chapterMeta(q0.subj, q0.ci);
+    const bankName = q0.mock ? '模拟题' : '十年真题';
+    const head = '【' + bankName + (q0.y ? ' · ' + q0.y : '') + '】' + (q0.label || '') +
+      ' · ' + (q0.subj || '') + (chap ? ' · ' + (chap.p ? '第' + chap.p + '篇 ' : '') + chap.t : '');
+    h += '<div class="pg-hd">' + esc(head) + '</div>';
     if (item.vignette) h += '<div class="pg-vig">' + esc(item.vignette) + '</div>';
     item.qs.forEach(function (q, i) {
       const tail = (item.vignette && item.tails && item.tails[i] != null) ? item.tails[i] : q.stem;
@@ -80,17 +84,43 @@
     return h;
   }
 
+  function dividerHTML(title, sub) {
+    return '<section class="pg divider"><div class="dv-t">' + esc(title) + '</div>' +
+      (sub ? '<div class="dv-s">' + esc(sub) + '</div>' : '') + '</section>';
+  }
+
+  function buildPages(items, opts) {
+    const out = [];
+    let lastKey = '';
+    let part = 0;
+    items.forEach(function (it, i) {
+      const q0 = it.qs[0];
+      const key = (q0.mock ? 'M' : 'R') + '|' + (q0.mock ? (q0.set || '模拟') : (q0.subj || ''));
+      if (key !== lastKey) {
+        lastKey = key;
+        part++;
+        const title = q0.mock ? ('第 ' + part + ' 部分 · 模拟题 · ' + (q0.set || '')) :
+          ('第 ' + part + ' 部分 · 真题 · ' + (q0.subj || ''));
+        const sub = q0.mock ? '' : ('1988–2026 · 共 ' + items.filter(function (x) { return !x.qs[0].mock && x.qs[0].subj === q0.subj; }).length + ' 题');
+        out.push(dividerHTML(title, sub));
+      }
+      out.push(pageHTML(it, i, opts));
+    });
+    return out;
+  }
+
   window.ExportUI = {
+    buildPages: buildPages,
     collect: collect,
     sortItems: sortItems,
     pageHTML: pageHTML,
     run: function (opts) {
-      let items = collect(opts.scope);
+      let items = collect(opts.scope, opts.subj);
       if (!items.length) { U.toast('这个范围里没有题目'); return; }
       items = sortItems(items, opts.sort);
       if (opts.limit) items = items.slice(0, opts.limit);
       const box = document.getElementById('print-root');
-      box.innerHTML = items.map(function (it, i) { return pageHTML(it, i, opts); }).join('');
+      box.innerHTML = buildPages(items, opts).join('');
       document.body.classList.add('printing');
       const back = function () {
         document.body.classList.remove('printing');
