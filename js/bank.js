@@ -316,6 +316,11 @@
     mapPagesForQuestion(q) {
       const m = window.XZ && window.XZ.maps;
       if (!m || !q) return [];
+      const ov = Store.mapFix(q.id);
+      if (ov && ov.length) {
+        const self0 = this;
+        return ov.map(function (n) { return m.pages[n - 1]; }).filter(Boolean);
+      }
       const sk = this.mapSubjectKey(q.subj);
       if (!sk) return [];
       const idx = this.mapIndex().filter(function (e) { return e.s.indexOf(sk) >= 0; });
