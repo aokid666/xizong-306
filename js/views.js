@@ -1395,6 +1395,9 @@
     html += '<div class="field"><div class="k">答案订正</div><div class="v">' +
       '<a class="btn sm" href="#/keys">查看订正记录（' + nKeys + '）</a>' +
       '<span class="hint" style="margin-left:8px">改过答案的题都在这里，可一键恢复原答案</span></div></div>';
+    html += '<div class="field"><div class="k">导出</div><div class="v">' +
+      '<a class="btn sm" href="#/export">导出 PDF（一题一面 · 收藏打星）</a>' +
+      '<span class="hint" style="margin-left:8px">按年份/章节排序，可只导收藏或错题</span></div></div>';
     html += '<div class="field"><div class="k">存储状态</div><div class="v"><span class="hint" data-storage></span></div></div>';
     html += '<div class="field"><div class="k">关于</div><div class="v"><span class="hint">真题库 ' + U.fmtNum(Bank.meta.total) + ' 题（' +
       Bank.meta.years[0].y + '—' + Bank.meta.years[Bank.meta.years.length - 1].y + ' 年，来源：医考帮顺序版 + 分层刷题）；' +
