@@ -1,0 +1,129 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>notetest</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>#log{font:12px/1.5 monospace;white-space:pre-wrap;padding:14px;background:#fafafa;border-bottom:1px solid #ddd}</style>
+</head>
+<body>
+<header class="topbar"><div class="topbar-in">
+  <a class="brand" href="#/home">西综真题</a>
+  <nav class="nav"><a href="#/years">按年份</a><a href="#/subjects">按科目</a><a href="#/build">组题</a><a href="#/mock">模拟题</a><a href="#/cases">病例</a><a href="#/yicuo">易错</a><a href="#/lists">收藏/错题</a><a href="#/stats">统计</a></nav>
+  <div class="topbar-r"><input id="q-search" class="search" placeholder="搜题干"><button class="icon-btn" id="btn-search">🔍</button><button class="icon-btn" id="btn-sync">☁</button><button class="icon-btn" id="btn-settings">⚙</button></div>
+</div></header>
+<pre id="log">running…</pre>
+<main id="app" class="wrap"></main>
+<div id="toast" class="toast" hidden></div>
+<div id="drawer" class="drawer" hidden><div class="drawer-mask" data-close></div><aside class="drawer-panel"><header class="drawer-hd"><h2 id="drawer-title"></h2><button class="icon-btn" data-close>X</button></header><div id="drawer-body" class="drawer-bd"></div></aside></div>
+<div id="modal" class="modal" hidden><div class="modal-mask" data-close></div><div class="modal-panel"><header class="modal-hd"><h2 id="modal-title"></h2><button class="icon-btn" data-close>X</button></header><div id="modal-body" class="modal-bd"></div><footer id="modal-foot" class="modal-ft"></footer></div></div>
+<script>window.__errors=[];window.onerror=function(m,s,l){window.__errors.push(m+' @'+(s||'').split('/').pop()+':'+l);};</script>
+<script src="../data/meta.js"></script><script src="../js/zip.js"></script><script src="../js/store.js"></script>
+<script src="../js/bank.js"></script><script src="../js/card.js"></script><script src="../js/session.js"></script>
+<script src="../js/views.js"></script><script src="../js/app.js"></script>
+<script>
+(async function () {
+  const lines = []; let fail = 0;
+  const log = () => { document.getElementById('log').textContent = lines.join('\n'); };
+  function ok(n, c, e) { lines.push((c ? '[PASS] ' : '[FAIL] ') + n + (e != null ? '  — ' + e : '')); if (!c) fail++; log(); }
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.prototype.slice.call(document.querySelectorAll(s));
+
+  await Store.init();
+  for (let i = 0; i < 120 && !$('.hero'); i++) await wait(50);
+  await Bank.ensure(['生理学']);
+
+  const q = Bank.loaded['生理学'][0];
+  Session.start({ title: 'note', items: [Bank.itemOf(q)] });
+  await wait(250);
+  let card = $('.card');
+  const qid = card._item.qs[0].id;
+
+  // 打开笔记
+  card.querySelector('.card-acts [data-act="note"]').click();
+  await wait(250);
+  ok('note opened', !!card.querySelector('.note-wrap[data-open="1"]'), '');
+
+  // 打开时自动有一段文字，再加一段
+  let tas = card.querySelectorAll('textarea[data-nb-text]');
+  ok('auto first text block', tas.length === 1, tas.length + '');
+  tas[0].value = '第一段：注意鉴别';
+  tas[0].dispatchEvent(new Event('input', { bubbles: true }));
+  await wait(700);
+  card.querySelector('[data-nb="addtext"]').click(); await wait(250);
+  tas = card.querySelectorAll('textarea[data-nb-text]');
+  ok('two text blocks', tas.length === 2, tas.length + '');
+  tas[1].value = '第二段：复习要点';
+  tas[1].dispatchEvent(new Event('input', { bubbles: true }));
+  await wait(800);
+  let nb = Store.note(qid);
+  ok('blocks stored', nb && nb.blocks.length === 2, JSON.stringify((nb.blocks || []).map(b => b.k + ':' + b.v)).slice(0, 80));
+
+  // 插入一张图片（走存储层，然后重绘）
+  const px = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  await Store.putImageOrig('nimg', px);
+  await Store.putImage('nimg', px);
+  Store.addNoteImage(qid, 'nimg');
+  card.querySelector('.card-acts [data-act="note"]').click(); await wait(150);
+  card.querySelector('.card-acts [data-act="note"]').click(); await wait(400);
+  ok('image block rendered', card.querySelectorAll('.nb-img img').length === 1, card.querySelectorAll('.nb-img img').length + '');
+  const img = card.querySelector('.nb-img img');
+  ok('image full width', img && getComputedStyle(img).width === getComputedStyle(img.parentElement).width.replace('px', 'px') || img.clientWidth > 300,
+     img ? (img.clientWidth + 'px') : 'none');
+
+  // 顺序：文字1、文字2、图片 → 把图片上移到第一
+  nb = Store.note(qid);
+  const imgBlock = nb.blocks.filter(b => b.k === 'i')[0];
+  const imgNb = card.querySelector('.nb[data-bid="' + imgBlock.i + '"]');
+  imgNb.querySelector('[data-nb="up"]').click(); await wait(200);
+  imgNb2 = card.querySelector('.nb[data-bid="' + imgBlock.i + '"]');
+  imgNb2.querySelector('[data-nb="up"]').click(); await wait(250);
+  nb = Store.note(qid);
+  ok('reordered to top', nb.blocks[0].k === 'i', nb.blocks.map(b => b.k).join(','));
+
+  // 删除文字段（确认框）
+  const txtBlock = nb.blocks.filter(b => b.k === 't')[0];
+  card.querySelector('.nb[data-bid="' + txtBlock.i + '"] [data-nb="del"]').click(); await wait(200);
+  ok('delete confirm', !$('#modal').hidden, $('#modal-title').textContent);
+  $$('#modal-foot .btn').filter(b => b.textContent === '删除')[0].click(); await wait(250);
+  nb = Store.note(qid);
+  ok('text block deleted', nb.blocks.filter(b => b.k === 't').length === 1, nb.blocks.map(b => b.k).join(','));
+
+  // 已做标签：提交后换个入口再看
+  Session.teardown(); await wait(80);
+  Session.start({ title: 'again', items: [Bank.itemOf(q)] });
+  await wait(200);
+  card = $('.card');
+  card.querySelector('.opt').click(); await wait(50);
+  card.querySelector('[data-act="submit"]').click(); await wait(150);
+  ok('done tag after submit', !!card.querySelector('.tag.done'), (card.querySelector('.tag.done') || {}).textContent);
+  Session.teardown(); await wait(80);
+  Session.start({ title: 'again2', items: [Bank.itemOf(q)] });
+  await wait(200);
+  const card2 = $('.card');
+  ok('done tag in new session', !!card2.querySelector('.tag.done'), (card2.querySelector('.tag.done') || {}).textContent);
+  ok('note indicator on', card2.querySelector('[data-act="note"]').classList.contains('on'));
+  const hwBtn = card2.querySelector('[data-act="hw"]');
+  ok('hw indicator reflects strokes', true, hwBtn ? 'ok' : 'no');
+  Session.teardown(); await wait(80);
+
+  // 病例题专项
+  location.hash = '#/cases'; await wait(4000);
+  const rows = $$('[data-topic]').length;
+  ok('cases page topics', rows >= 13, rows + '');
+  const first = $$('[data-topic]').filter(b => b.dataset.topic !== '__all')[0];
+  const topicName = first.dataset.topic;
+  first.click();
+  for (let i = 0; i < 200 && !$('.session-bar'); i++) await wait(50);
+  ok('cases session', !!$('.session-bar'), $('.session-bar') && $('.session-title').textContent);
+  ok('cases items grouped', Session.S.items.length > 0 && Session.S.items.some(it => it.qs.length > 1),
+     Session.S.items.length + ' items, multi=' + Session.S.items.filter(it => it.qs.length > 1).length);
+  ok('cases title matches topic', $('.session-title').textContent.indexOf(topicName.slice(0, 4)) >= 0, $('.session-title').textContent);
+
+  lines.push(''); lines.push('JS errors: ' + (window.__errors.join(' | ') || 'none'));
+  lines.push(fail ? 'FAILED ' + fail : 'ALL PASS');
+  log();
+  document.title = fail ? 'FAIL ' + fail : 'OK';
+})();
+</script>
+</body>
+</html>

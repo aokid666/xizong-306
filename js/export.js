@@ -1,0 +1,379 @@
+/* ============================================================
+   export.js — 导出为 PDF（一题一面；含高亮/标注/笔记/手写/导图）
+   ============================================================ */
+(function () {
+  'use strict';
+  var esc = function (s) { return U.esc(s); };
+
+  /* ---------- 高亮与标注 ---------- */
+  function renderMarked(text, marks) {
+    text = text || '';
+    var list = (marks || []).slice().sort(function (a, b) { return a.s - b.s; });
+    if (!list.length) return { html: esc(text), notes: [] };
+    var out = '', pos = 0, notes = [];
+    list.forEach(function (m) {
+      if (m.s < pos) return;
+      out += esc(text.slice(pos, m.s));
+      var seg = text.slice(m.s, m.e);
+      var cls = m.k === 'hl' ? 'hl' : 'ul';
+      var sup = '';
+      if (m.n) { notes.push(m.n); sup = '<sup class="fn">' + notes.length + '</sup>'; }
+      out += '<span class="mk-' + cls + '">' + esc(seg) + '</span>' + sup;
+      pos = m.e;
+    });
+    out += esc(text.slice(pos));
+    return { html: out, notes: notes };
+  }
+
+  function marksOf(qid, field, text) {
+    var list = Store.marks(qid).filter(function (m) { return m.f === field; });
+    if (!text) return list;
+    return list.map(function (m) {
+      var s0 = m.s, e0 = m.e;
+      if (e0 > text.length || text.slice(s0, e0) !== m.tx) {
+        var idx = m.tx ? text.indexOf(m.tx) : -1;
+        if (idx >= 0) { s0 = idx; e0 = idx + m.tx.length; }
+        else { s0 = Math.min(s0, text.length); e0 = Math.min(e0, text.length); }
+      }
+      return { i: m.i, s: s0, e: e0, k: m.k, n: m.n, tx: m.tx };
+    }).filter(function (m) { return m.e > m.s; });
+  }
+
+  /* ---------- 手写：转成 SVG（矢量，打印清晰） ---------- */
+  function hwSvg(qid, w) {
+    var d = Store.hw(qid);
+    if (!d || !d.s || !d.s.length) return '';
+    var bw = d.w || 800, bh = d.h || 400;
+    var scale = w / bw;
+    var parts = d.s.map(function (st) {
+      var p = st.p || [], pts = [];
+      for (var i = 0; i + 1 < p.length; i += 2) pts.push((p[i] * scale) + ',' + (p[i + 1] * scale));
+      return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#222" stroke-width="' +
+        Math.max(1, (st.w || 3) * scale) + '" stroke-linecap="round" stroke-linejoin="round"/>';
+    }).join('');
+    return '<div class="pg-hw"><div class="pg-lab">手写批注</div>' +
+      '<svg viewBox="0 0 ' + w + ' ' + (bh * scale) + '" width="' + w + '">' + parts + '</svg></div>';
+  }
+
+  /* 手写覆盖层：和答题界面一样压在题目上 */
+  function hwOverlay(qid) {
+    var d = Store.hw(qid);
+    if (!d || !d.s || !d.s.length) return '';
+    var w = d.w || 800, hh = d.h || 400;
+    var parts = d.s.map(function (st) {
+      var p = st.p || [], pts = [];
+      for (var i = 0; i + 1 < p.length; i += 2) pts.push(p[i] + ',' + p[i + 1]);
+      return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#1a1a1a" stroke-width="' +
+        (st.w || 3) + '" stroke-linecap="round" stroke-linejoin="round"/>';
+    }).join('');
+    return '<svg class="pg-hwover" viewBox="0 0 ' + w + ' ' + hh + '" preserveAspectRatio="xMinYMin meet">' + parts + '</svg>';
+  }
+
+  /* ---------- 笔记 ---------- */
+  function noteHTML(qid, imgs) {
+    var n = Store.note(qid);
+    if (!n || !n.blocks || !n.blocks.length) return '';
+    var h = '<div class="pg-note"><div class="pg-lab">笔记</div>';
+    n.blocks.forEach(function (b) {
+      if (b.k === 't' && b.v && b.v.trim()) h += '<div class="nb-t">' + esc(b.v) + '</div>';
+      else if (b.k === 'i' && imgs[b.v]) h += '<img src="' + imgs[b.v] + '" class="nb-img">';
+    });
+    return h + '</div>';
+  }
+
+  /* ---------- 导图截图 ---------- */
+  function mapHTML(q0) {
+    var m = window.XZ && window.XZ.maps;
+    if (!m) return '';
+    var pages = [];
+    try { pages = Bank.mapPagesForQuestion(q0); } catch (e) { pages = []; }
+    if (!pages.length) return '';
+    var p = pages[0];
+    return '<div class="pg-map"><div class="pg-lab">关联导图 · 第 ' + p.n + ' 页</div>' +
+      '<img src="data/maps/' + p.img + '" class="map-img"></div>';
+  }
+
+  /* ---------- 收集 ---------- */
+  function collect(scope, f) {
+    f = f || {};
+    var SS = (f.subjects && f.subjects.length) ? new Set(f.subjects) : null;
+    var YY = (f.years && f.years.length) ? new Set(f.years.map(String)) : null;
+    var BB = (f.banks && f.banks.length) ? new Set(f.banks) : null;
+    var CC = (f.chaps && f.chaps.length) ? new Set(f.chaps) : null;
+    var items = [];
+    function pick(q) {
+      if (SS && !SS.has(q.subj)) return;
+      if (CC && !CC.has(q.subj + '|' + q.ci)) return;
+      if (YY && q.y && !YY.has(String(q.y))) return;
+      if (BB) {
+        if (!q.mock && !BB.has('real')) return;
+        if (q.mock && !BB.has('mock')) return;
+      }
+      if (f.year && String(q.y) !== String(f.year)) return;
+      if (f.bank === 'real' && q.mock) return;
+      if (f.bank === 'mock' && !q.mock) return;
+      if (f.chap && String(q.ci) !== String(f.chap)) return;
+      if (scope === 'fav' && !Store.isFav(q.id)) return;
+      if (scope === 'wrong') { var p = Store.prog(q.id); if (!p || p.ok) return; }
+      if (scope === 'flag' && !Store.flag(q.id)) return;
+      if (scope === 'new') { if (Store.prog(q.id)) return; }
+      if (scope === 'done') { if (!Store.prog(q.id)) return; }
+      items.push(q);
+    }
+    Bank.subjectNames().forEach(function (n) { (Bank.loaded[n] || []).forEach(pick); });
+    (Bank.mock ? Bank.mock.list : []).forEach(pick);
+    return Bank.itemsOf(items);
+  }
+
+  function sortItems(items, by) {
+    var arr = items.slice();
+    if (by === 'year') {
+      arr.sort(function (a, b) { return (b.qs[0].y || 0) - (a.qs[0].y || 0) || (a.qs[0].n - b.qs[0].n); });
+    } else if (by === 'chapter') {
+      arr.sort(function (a, b) {
+        var ca = Bank.chapterMeta(a.qs[0].subj, a.qs[0].ci) || { t: '' };
+        var cb = Bank.chapterMeta(b.qs[0].subj, b.qs[0].ci) || { t: '' };
+        return (a.qs[0].subj || '').localeCompare(b.qs[0].subj || '') ||
+          String(ca.t).localeCompare(String(cb.t)) || (a.qs[0].n - b.qs[0].n);
+      });
+    } else if (by === 'bank') {
+      arr.sort(function (a, b) {
+        var am = a.qs[0].mock ? 1 : 0, bm = b.qs[0].mock ? 1 : 0;
+        if (am !== bm) return am - bm;
+        var s1 = (a.qs[0].subj || '').localeCompare(b.qs[0].subj || '');
+        if (s1) return s1;
+        return (b.qs[0].y || 0) - (a.qs[0].y || 0) || (a.qs[0].n - b.qs[0].n);
+      });
+    } else {
+      arr.sort(function (a, b) { return (a.qs[0].subj || '').localeCompare(b.qs[0].subj || ''); });
+    }
+    return arr;
+  }
+
+  function starSvg() {
+    return '<svg viewBox="0 0 24 24" width="20" height="20" fill="#d0021b">' +
+      '<path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.3 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z"/></svg>';
+  }
+
+  function pageHTML(item, idx, opts, imgs) {
+    var q0 = item.qs[0];
+    var fav = Store.isFav(q0.id);
+    var odd = (idx % 2 === 0);
+    var chap = q0.mock ? null : Bank.chapterMeta(q0.subj, q0.ci);
+    var bankName = opts.title ? opts.title : (q0.mock ? '模拟题' : '十年真题');
+    var head = '【' + bankName + (q0.y ? ' · ' + q0.y : '') + '】' + (q0.label || '') +
+      ' · ' + (q0.subj || '') + (chap ? ' · ' + (chap.p ? '第' + chap.p + '篇 ' : '') + chap.t : '');
+    var h = '<section class="pg' + (fav ? ' fav' : '') + '">';
+    if (fav) h += '<div class="pg-star ' + (odd ? 'r' : 'l') + '">' + starSvg() + '</div>';
+    h += '<div class="pg-hd">' + esc(head) + '</div>';
+    h += '<div class="pg-body">';
+    if (item.vignette) h += '<div class="pg-vig">' + esc(item.vignette) + '</div>';
+
+    var fnotes = [];
+    item.qs.forEach(function (q, i) {
+      var tail = (item.vignette && item.tails && item.tails[i] != null) ? item.tails[i] : q.stem;
+      var r = renderMarked(tail, opts.mark ? marksOf(q.id, 'stem', tail) : []);
+      var html = r.html; fnotes = fnotes.concat(r.notes || []);
+      h += '<div class="pg-q">' + (item.qs.length > 1 ? '<b>' + (i + 1) + '．</b>' : '') + html + '</div>';
+      h += '<div class="pg-opts">' + (q.opts || []).map(function (o) {
+        var rr = renderMarked(o.v, opts.mark ? marksOf(q.id, 'opt' + o.k, o.v) : []);
+        (rr.notes || []).forEach(function (n) { fnotes.push(n); });
+        return '<div><span class="k">' + esc(o.k) + '．</span>' +
+          (typeof rr === 'string' ? esc(o.v) : rr.html) + '</div>';
+      }).join('') + '</div>';
+      if (opts.withAnswer) {
+        h += '<div class="pg-ans">答案：' + esc(Bank.truth(q) || '（无）') + '</div>';
+        if (q.exp) {
+          var re = renderMarked(q.exp, opts.mark ? marksOf(q.id, 'exp', q.exp) : []);
+          (re.notes || []).forEach(function (n) { fnotes.push(n); });
+          h += '<div class="pg-exp">解析：' + (typeof re === 'string' ? esc(q.exp) : re.html) + '</div>';
+        }
+      }
+      if (opts.note) h += noteHTML(q.id, imgs);
+    });
+    h += hwOverlay(q0.id) + '</div>';
+    if (opts.map) h += mapHTML(q0);
+    if (fnotes.length) {
+      h += '<div class="pg-fn"><div class="pg-lab">标注</div>' + fnotes.map(function (n, i) {
+        return '<div>' + (i + 1) + '．' + esc(n) + '</div>';
+      }).join('') + '</div>';
+    }
+    h += '<div class="pg-ft">' + (idx + 1) + '</div></section>';
+    return h;
+  }
+
+  function coverHTML(items, sections, title) {
+    return '<section class="pg cover">' +
+      '<div class="cv-t">' + esc(title || '西综真题 · 题目册') + '</div>' +
+      '<div class="cv-s">' + new Date().toLocaleDateString('zh-CN') + ' · 共 ' + items.length + ' 组题 · ' +
+      sections.length + ' 个部分</div>' +
+      (sections.length ? '<ol class="cv-list">' + sections.map(function (t) {
+        return '<li>' + esc(t) + '</li>';
+      }).join('') + '</ol>' : '') +
+      '<div class="cv-f">考西医综合 · 就用这份</div></section>';
+  }
+
+  function dividerHTML(title, sub) {
+    return '<section class="pg divider"><div class="dv-t">' + esc(title) + '</div>' +
+      (sub ? '<div class="dv-s">' + esc(sub) + '</div>' : '') + '</section>';
+  }
+
+  /* 预先取出笔记图片（IndexedDB，异步） */
+  function loadImages(items) {
+    var ids = [];
+    items.forEach(function (it) {
+      it.qs.forEach(function (q) {
+        var n = Store.note(q.id);
+        if (!n || !n.blocks) return;
+        n.blocks.forEach(function (b) { if (b.k === 'i' && b.v) ids.push(b.v); });
+      });
+    });
+    var map = {};
+    return Promise.all(ids.map(function (id) {
+      return Store.getImage(id).then(function (src) { if (src) map[id] = src; }).catch(function () { });
+    })).then(function () { return map; });
+  }
+
+  function buildPages(items, opts, imgs) {
+    var out = [], lastKey = '', part = 0, sections = [];
+    items.forEach(function (it, i) {
+      var q0 = it.qs[0];
+      var chapM = q0.mock ? null : Bank.chapterMeta(q0.subj, q0.ci);
+      var key, title;
+      if (opts.sort === 'year') {
+        key = 'Y' + (q0.y || 0);
+        title = '第 ' + (part + 1) + ' 部分 · ' + (q0.y || '') + ' 年';
+      } else if (opts.sort === 'chapter') {
+        key = (q0.mock ? 'M' : (q0.subj || '')) + '|' + (q0.ci || 0);
+        title = '第 ' + (part + 1) + ' 部分 · ' + (q0.subj || '') + (chapM ? ' · ' + (chapM.p ? '第' + chapM.p + '篇 ' : '') + chapM.t : '');
+      } else if (opts.sort === 'subject') {
+        key = q0.mock ? 'M' : (q0.subj || '');
+        title = '第 ' + (part + 1) + ' 部分 · ' + (q0.mock ? '模拟题' : (q0.subj || ''));
+      } else {
+        key = (q0.mock ? 'M|' + (q0.set || '模拟') : 'R|' + (q0.subj || ''));
+        title = q0.mock ? ('第 ' + (part + 1) + ' 部分 · 模拟题 · ' + (q0.set || ''))
+          : ('第 ' + (part + 1) + ' 部分 · 真题 · ' + (q0.subj || ''));
+      }
+      if (key !== lastKey) {
+        lastKey = key;
+        part++;
+        title = title.replace('第 ' + (part - 1 + 1) + ' 部分', '第 ' + part + ' 部分');
+        var sub = q0.mock ? '' : ('共 ' + items.filter(function (x) {
+          return !x.qs[0].mock && x.qs[0].subj === q0.subj && (!chapM || String(x.qs[0].ci) === String(q0.ci));
+        }).length + ' 题');
+        sections.push(title.replace(/^第 \d+ 部分 · /, ''));
+        out.push(dividerHTML(title, sub));
+      }
+      out.push(pageHTML(it, i, opts, imgs || {}));
+    });
+    if (opts.cover !== false) out.unshift(coverHTML(items, sections, opts.title));
+    return out;
+  }
+
+  function runWith(items, opts) {
+    opts = opts || {};
+    if (!items || !items.length) { U.toast('这里没有题目'); return; }
+    var box = document.getElementById('print-root');
+    var prep = (opts.map !== false && Bank.ensureMaps) ? Bank.ensureMaps().catch(function () { }) : Promise.resolve();
+    prep.then(function () { return loadImages(items); }).catch(function () { return {}; }).then(function (imgs) {
+      var full = {
+        mark: opts.mark !== false, note: opts.note !== false,
+        hw: opts.hw !== false, map: opts.map !== false,
+        withAnswer: !!opts.withAnswer, sort: opts.sort || 'bank'
+      };
+      var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
+      box.innerHTML = buildPages(arr, full, imgs).join('');
+      document.body.classList.add('printing');
+      var back = function () { document.body.classList.remove('printing'); window.removeEventListener('afterprint', back); };
+      window.addEventListener('afterprint', back);
+      U.toast('共 ' + arr.length + ' 组，正在准备打印…', 2000);
+      var list = Array.prototype.slice.call(box.querySelectorAll('img'));
+      Promise.all(list.map(function (x) {
+        if (x.complete && x.naturalWidth) return Promise.resolve();
+        return new Promise(function (res) { x.onload = x.onerror = function () { res(); }; });
+      })).then(function () {
+        setTimeout(function () { document.getElementById('toast').hidden = true; window.print(); }, 300);
+      });
+    });
+  }
+
+  function prepAll(items, opts) {
+    var pr = (opts.map !== false && Bank.ensureMaps) ? Bank.ensureMaps().catch(function () { }) : Promise.resolve();
+    return pr.then(function () { return opts.note === false ? {} : loadImages(items); }).catch(function () { return {}; });
+  }
+
+  function printGroup(items, opts) {
+    return new Promise(function (resolve) {
+      var box = document.getElementById('print-root');
+      prepAll(items, opts).then(function (imgs) {
+        var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
+        box.innerHTML = buildPages(arr, opts, imgs).join('');
+        document.body.classList.add('printing');
+        var list = Array.prototype.slice.call(box.querySelectorAll('img'));
+        Promise.all(list.map(function (x) {
+          if (x.complete && x.naturalWidth) return Promise.resolve();
+          return new Promise(function (res) { x.onload = x.onerror = function () { res(); }; });
+        })).then(function () {
+          var done = function () {
+            window.removeEventListener('afterprint', done);
+            document.body.classList.remove('printing');
+            resolve();
+          };
+          window.addEventListener('afterprint', done);
+          U.toast('共 ' + arr.length + ' 组：请选择「另存为 PDF」', 4000);
+          setTimeout(function () { try { document.getElementById('toast').hidden = true; } catch (e) { } window.print(); }, 400);
+        });
+      }).catch(function () { resolve(); });
+    });
+  }
+
+  window.ExportUI = {
+    runMulti: function (groups, opts) {
+      var i = 0;
+      var next = function () {
+        if (i >= groups.length) { U.toast('全部导出完成', 2500); return; }
+        var g = groups[i++];
+        U.toast('第 ' + i + ' / ' + groups.length + ' 册：' + (g.title || ''), 3000);
+        printGroup(g.items, Object.assign({}, opts, { title: g.title })).then(function () { setTimeout(next, 600); });
+      };
+      next();
+    },
+    runItems: runWith,
+    collect: collect,
+    sortItems: sortItems,
+    buildPages: buildPages,
+    run: function (opts) {
+      var items = collect(opts.scope, opts);
+      if (!items.length) { U.toast('这个范围里没有题目'); return; }
+      items = sortItems(items, opts.sort);
+      if (opts.limit) items = items.slice(0, opts.limit);
+      var box = document.getElementById('print-root');
+      var waitImgs = function (im) {
+        var list = Array.prototype.slice.call(im.querySelectorAll('img'));
+        return Promise.all(list.map(function (x) {
+          if (x.complete && x.naturalWidth) return Promise.resolve();
+          return new Promise(function (res) { x.onload = x.onerror = function () { res(); }; });
+        }));
+      };
+      var go = function (imgs) {
+        box.innerHTML = buildPages(items, opts, imgs).join('');
+        document.body.classList.add('printing');
+        var back = function () {
+          document.body.classList.remove('printing');
+          window.removeEventListener('afterprint', back);
+        };
+        window.addEventListener('afterprint', back);
+        U.toast('共 ' + items.length + ' 题，正在准备打印…', 2000);
+        Promise.all([waitImgs(box), new Promise(function (r) { setTimeout(r, 300); })])
+          .then(function () { document.getElementById('toast').hidden = true; window.print(); });
+      };
+      var prep = (opts.map && Bank.ensureMaps) ? Bank.ensureMaps().catch(function () { }) : Promise.resolve();
+      if (opts.note) {
+        U.toast('正在整理笔记与图片…', 2000);
+        prep.then(function () { return loadImages(items); }).then(go).catch(function () { go({}); });
+      } else {
+        prep.then(function () { go({}); }).catch(function () { go({}); });
+      }
+    }
+  };
+})();

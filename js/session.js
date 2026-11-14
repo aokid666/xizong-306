@@ -1,0 +1,852 @@
+﻿/* ============================================================
+   session.js — 做题引擎（滚动模式 / 单题模式、分组提交）
+   ============================================================ */
+(function () {
+  'use strict';
+  const esc = U.esc;
+
+  const S = {
+    title: '', subtitle: '', items: [], sel: {}, res: {}, redo: false, redoRes: {},
+    mode: 'scroll', idx: 0, chunk: 10, submitMode: 'single',
+    startTs: 0, done: false
+  };
+  window.Session = {
+    S: S, start: start, resume: resume,
+    teardown: function () {
+      S.items = []; S.sel = {}; S.res = {};
+      const p = document.querySelector('.pager'); if (p) p.remove();
+      document.body.classList.remove('has-pager');
+    }
+  };
+
+  let bar = null, content = null, pager = null;
+
+  function sortLetters(s) { return String(s || '').split('').sort().join(''); }
+
+  /* ---------------- 启动 ---------------- */
+  function start(opt) {
+    S.title = opt.title || '练习';
+    S.subtitle = opt.subtitle || '';
+    S.items = opt.items || [];
+    S.redo = !!opt.redo;
+    S.redoRes = {};
+    if (S.redo) {
+      S.items.forEach(function (it) {
+        it.qs.forEach(function (q) { Card.markHidden(q.id, true); });
+      });
+    }
+    S.sel = {}; S.res = {}; S.idx = 0; S.done = false;
+
+    // 恢复上次的作答（必须在清空之后；重做模式除外）
+    if (!opt.redo) {
+      S.items.forEach(function (it) {
+        it.qs.forEach(function (q) {
+          const pr = Store.prog(q.id);
+          if (pr && pr.a && !S.sel[q.id]) {
+            S.sel[q.id] = pr.a;
+            S.res[q.id] = { ok: !!pr.ok, pick: pr.a };
+          }
+        });
+      });
+    }
+    S.mode = opt.mode || Store.get('mode') || 'scroll';
+    S.chunk = Math.max(1, Store.get('chunk') || 10);
+    S.submitMode = opt.submitMode || Store.get('submitMode') || 'single';
+    S.startTs = Date.now();
+    if (!S.items.length) { U.toast('没有符合条件的题目'); return; }
+    saveSnapshot();
+    mount();
+  }
+
+  function resume() {
+    const snap = Store.doc.session;
+    if (!snap || !snap.items || !snap.items.length) return false;
+    const names = snap.subjects || [];
+    return Bank.ensure(names).then(function () {
+      const items = [];
+      snap.items.forEach(function (key) {
+        if (key.indexOf('c:') === 0) {
+          const cid = key.slice(2);
+          const qs = Bank.clusters[cid];
+          if (qs && qs.length) { const it = Bank.itemOf(qs[0]); it.key = key; items.push(it); }
+        } else if (key.indexOf('b:') === 0) {
+          const q = Bank.q(key.slice(2));
+          if (q) {
+            const rebuilt = Bank.itemsOf([q])[0];
+            rebuilt.key = key;
+            items.push(rebuilt);
+          }
+        } else {
+          const q = Bank.q(key.slice(2));
+          if (q) items.push(Bank.itemOf(q));
+        }
+      });
+      if (!items.length) { Store.clearSession(); return false; }
+      S.title = snap.title; S.subtitle = snap.subtitle || '';
+      S.items = items; S.sel = snap.sel || {}; S.res = snap.res || {};
+      S.mode = snap.mode || 'scroll'; S.idx = snap.idx || 0;
+      S.chunk = snap.chunk || 10; S.submitMode = snap.submitMode || 'single';
+      S.startTs = snap.ts || Date.now(); S.done = false;
+      mount();
+      return true;
+    });
+  }
+
+  function saveSnapshot() {
+    const subs = {};
+    S.items.forEach(function (it) { it.qs.forEach(function (q) { subs[q.subj] = 1; }); });
+    Store.setSession({
+      title: S.title, subtitle: S.subtitle,
+      items: S.items.map(function (it) { return it.key; }),
+      sel: S.sel, res: S.res, idx: S.idx, mode: S.mode,
+      chunk: S.chunk, submitMode: S.submitMode, ts: S.startTs,
+      subjects: Object.keys(subs)
+    });
+  }
+
+  /* ---------------- 挂载 ---------------- */
+  function mount() {
+    const old = document.querySelector('.pager');
+    if (old) old.remove();
+    const app = U.resetApp('wrap session');
+    document.body.classList.toggle('has-pager', S.mode === 'paged');
+
+    bar = U.el('div', { class: 'session-bar' });
+    bar.innerHTML = '<div class="in">' +
+      '<span class="session-title">' + esc(S.title) + '</span>' +
+      '<span class="session-prog" data-prog>0 / 0</span>' +
+      '<div class="progress-line"><i data-bar style="width:0%"></i></div>' +
+      '<span class="sp"></span>' +
+      '<div class="session-tools">' +
+      '<button class="btn ghost sm" data-tool="sheet">答题卡</button>' +
+      '<button class="btn ghost sm" data-tool="submit">' + (S.submitMode === 'single' ? '提交本题' : '提交已做') + '</button>' +
+      '<button class="btn ghost sm" data-tool="mode" title="切换提交方式">' + (S.submitMode === 'single' ? '每题' : '整卷') + '</button>' +
+      '<button class="btn ghost sm" data-tool="layout" title="切换滚动/单题">' + (S.mode === 'paged' ? '单题' : '滚动') + '</button>' +
+      '<button class="btn ghost sm" data-tool="export" title="把这一批题导出为 PDF">导出</button>' +
+      '<button class="btn ghost sm" data-tool="mode">' + (S.mode === 'scroll' ? '单题模式' : '滚动模式') + '</button>' +
+      '<button class="btn ghost sm" data-tool="exit">退出</button>' +
+      '</div></div>';
+
+    content = U.el('div', { class: 'session-body' });
+    app.appendChild(bar);
+    app.appendChild(content);
+
+    pager = U.el('div', { class: 'pager', hidden: S.mode !== 'paged' });
+    pager.innerHTML = '<div class="in">' +
+      '<button class="btn ghost sm" data-page="prev">← 上一题</button>' +
+      '<span class="pos" data-pos></span>' +
+      '<span class="sp"></span>' +
+      '<button class="btn ghost sm" data-tool2="sheet">答题卡</button>' +
+      '<button class="btn sm primary" data-tool2="submit">提交</button>' +
+      '<button class="btn ghost sm" data-page="next">下一题 →</button>' +
+      '</div>';
+    document.body.appendChild(pager);
+
+    renderContent();
+    refreshBar();
+    Card.attach(content);
+    bind();
+  }
+
+  function renderContent() {
+    content.innerHTML = '';
+    content.className = 'session-body' + (S.mode === 'paged' ? ' paged' : '');
+    if (S.mode === 'paged') {
+      const it = S.items[S.idx];
+      if (it) content.appendChild(makeCard(it, S.idx));
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    S.items.forEach(function (it, i) {
+      frag.appendChild(makeCard(it, i));
+      if (S.submitMode === 'chunk' && (i + 1) % S.chunk === 0 && i + 1 < S.items.length) {
+        frag.appendChild(chunkSep(i - S.chunk + 2, i + 1));
+      }
+    });
+    content.appendChild(frag);
+  }
+
+  function chunkSep(from, to) {
+    const d = U.el('div', { class: 'chunk-sep', style: 'display:flex;gap:12px;align-items:center;padding:16px 0;border-bottom:1px solid #efedeb' });
+    d.innerHTML = '<span class="hint">第 ' + from + '–' + to + ' 题</span><span style="flex:1"></span>' +
+      '<button class="btn sm" data-tool="submit-chunk" data-from="' + (from - 1) + '" data-to="' + (to - 1) + '">提交本组</button>';
+    return d;
+  }
+
+  function makeCard(item, i) {
+    const card = Card.build(item, i, {
+      sel: function (qid) { return S.sel[qid] || ''; },
+      res: function (qid) { return S.res[qid] || null; },
+      showSubmit: function () { return S.submitMode === 'single' || S.mode === 'paged'; }
+    });
+    Card.applyState(card, item, {
+      sel: function (qid) { return S.sel[qid] || ''; },
+      res: function (qid) { return S.res[qid] || null; },
+      showSubmit: function () { return S.submitMode === 'single' || S.mode === 'paged'; }
+    });
+    return card;
+  }
+
+  function reState(card) {
+    Card.applyState(card, card._item, {
+      sel: function (qid) { return S.sel[qid] || ''; },
+      res: function (qid) { return S.res[qid] || null; },
+      showSubmit: function () { return S.submitMode === 'single' || S.mode === 'paged'; }
+    });
+  }
+
+  /* ---------------- 交互 ---------------- */
+  function bind() {
+    if (bind._done) { return; }
+    bind._done = true;
+
+    document.addEventListener('click', function (e) {
+      if (!S.items.length) return;
+      const t = e.target;
+
+      const opt = t.closest('.opt');
+      if (opt && !opt.classList.contains('locked') && content.contains(opt)) {
+        toggleChoice(opt.closest('.subq'), opt.dataset.k, opt);
+        return;
+      }
+      const pick = t.closest('.pick');
+      if (pick && content.contains(pick)) {
+        toggleChoice(pick.closest('.subq'), pick.dataset.k, pick);
+        return;
+      }
+
+      const act = t.closest('[data-act]');
+      if (act && content.contains(act)) {
+        const card = act.closest('.card');
+        const item = card._item;
+        const kind = act.dataset.act;
+        const subq = act.closest('.subq');
+        if (kind === 'submit') { submitItem(item); return; }
+        if (kind === 'reveal') { revealItem(item); return; }
+        if (kind === 'exp') {
+          if (Store.get('revealMode') === 'side') { showExplain(subq ? subq.dataset.qid : item.qs[0].id); }
+          else {
+            const d = subq && subq.querySelector('details.exp');
+            if (d) { d.hidden = false; d.open = true; d.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+          }
+          return;
+        }
+        if (kind === 'fav') {
+          try {
+            const now = Store.toggleFav(item.qs[0].id);
+            Card.refreshActs(card, item);
+            U.toast(now ? '已收藏 ★（可到「收藏/错题」查看）' : '已取消收藏');
+          } catch (err) {
+            U.toast('收藏失败：' + (err && err.message || err), 3000);
+          }
+          return;
+        }
+        if (kind === 'flag') { flagDialog(item.qs[0].id, function () { Card.refreshActs(card, item); }); return; }
+        if (kind === 'note') { Card.openNote(card, subq ? subq.dataset.qid : item.qs[0].id); return; }
+        if (kind === 'hw') { Card.hwToggle(card); return; }
+        if (kind === 'key') { keyDialog(item); return; }
+        if (kind === 'map') { mapDialog(item); return; }
+        if (kind === 'lecture') { LectureUI.open(item); return; }
+        if (kind === 'link') { linkDialog(item); return; }
+      }
+
+      const fbBtn = t.closest('[data-fb]');
+      if (fbBtn) {
+        const ce = fbBtn.closest('.card');
+        const q0 = ce && ce._item && ce._item.qs[0];
+        if (!q0) return;
+        const cur = Store.fbGet(q0.id);
+        const box = U.el('div');
+        box.innerHTML = '<p class="hint" style="margin-bottom:8px">觉得这题有问题（答案/题干/解析/配图），记一句，之后在「反馈」页统一查看。</p>';
+        const ta = U.el('textarea', { class: 'input', style: 'width:100%;height:80px' });
+        ta.value = cur ? cur.n : '';
+        box.appendChild(ta);
+        U.modal({
+          title: '反馈 · ' + (q0.label || ''), body: box, onOpen: function () { ta.focus(); },
+          buttons: [
+            { label: '取消' },
+            { label: '取消反馈', onClick: function () { Store.fbSet(q0.id, null); U.toast('已取消反馈'); } },
+            { label: '保存', cls: 'primary', onClick: function () { Store.fbSet(q0.id, ta.value.trim()); U.toast('已记录'); } }
+          ]
+        });
+        return;
+      }
+      const fixKey = t.closest('[data-fixkey]');
+      if (fixKey) {
+        const ce = fixKey.closest('.card');
+        if (ce && ce._item) {
+          window.__keyDialog(ce._item);
+          setTimeout(function () { if (ce._item) Card.renderLinks(ce, ce._item.qs[0]); }, 400);
+        }
+        return;
+      }
+      const redoOne = t.closest('[data-redo-one]');
+      if (redoOne) {
+        const cardEl = redoOne.closest('.card');
+        if (cardEl && cardEl._item) {
+          U.confirmRedo([cardEl._item], '这一题');
+        }
+        return;
+      }
+
+      const linkChip = t.closest('[data-linkto]');
+      if (linkChip) {
+        const cardEl = linkChip.closest('.card');
+        showQuestionModal(linkChip.dataset.linkto, cardEl ? cardEl._item : null);
+        return;
+      }
+
+      const tool = t.closest('[data-tool]');
+      if (tool) {
+        const k = tool.dataset.tool;
+        if (k === 'sheet') openSheet();
+        else if (k === 'export') {
+        if (!S.items.length) return;
+        exportDialog();
+        return;
+      }
+      else if (k === 'layout') {
+        S.mode = (S.mode === 'paged') ? 'scroll' : 'paged';
+        Store.set('mode', S.mode);
+        saveSnapshot();
+        document.body.classList.toggle('has-pager', S.mode === 'paged');
+        mount();
+        U.toast(S.mode === 'paged' ? '已切换为：单题（左右切换）' : '已切换为：滚动（纸质版）');
+        return;
+      }
+      else if (k === 'mode') {
+        S.submitMode = (S.submitMode === 'single') ? 'all' : 'single';
+        Store.set('submitMode', S.submitMode);
+        saveSnapshot();
+        mount();
+        U.toast(S.submitMode === 'single' ? '已切换为：每题提交' : '已切换为：整卷提交（做多少交多少）');
+        return;
+      }
+      else if (k === 'submit') {
+        if (S.submitMode === 'single') submitChunk();
+        else submitPending();
+      }
+        else if (k === 'submit-chunk') submitRange(+tool.dataset.from, +tool.dataset.to);
+        else if (k === 'mode') toggleMode();
+        else if (k === 'exit') exit();
+        return;
+      }
+      const tool2 = t.closest('[data-tool2]');
+      if (tool2) {
+        if (tool2.dataset.tool2 === 'sheet') openSheet();
+        else submitChunk();
+        return;
+      }
+      const page = t.closest('[data-page]');
+      if (page) {
+        go(S.idx + (page.dataset.page === 'next' ? 1 : -1));
+        return;
+      }
+      const jump = t.closest('[data-jump]');
+      if (jump) { U.closeDrawer(); go(+jump.dataset.jump); return; }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (!S.items.length) return;
+      if (e.target.matches('input,textarea,select')) return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' && S.mode === 'paged') {
+        if (S.mode === 'paged') { e.preventDefault(); go(S.idx + 1); }
+      } else if (e.key === 'ArrowLeft') {
+        if (S.mode === 'paged') { e.preventDefault(); go(S.idx - 1); }
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        submitChunk();
+      }
+    });
+
+    window.addEventListener('scroll', function () {
+      if (S.mode !== 'scroll') return;
+      updateActiveOnScroll();
+    }, { passive: true });
+  }
+
+  function currentCardIndexOnScreen() {
+    const cards = U.$$('.card', content);
+    if (!cards.length) return 0;
+    const mid = window.innerHeight * 0.35;
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i].getBoundingClientRect();
+      if (r.bottom > mid) return i;
+    }
+    return cards.length - 1;
+  }
+
+  function updateActiveOnScroll() {
+    if (!bar) return;
+    const i = currentCardIndexOnScreen();
+    if (i !== S.idx) { S.idx = i; refreshBar(); }
+  }
+
+  /* ---------------- 提交与判定 ---------------- */
+  function submitPending() {
+    let n = 0;
+    S.items.forEach(function (it) {
+      if (it.qs.every(function (q) { return S.res[q.id]; })) return;
+      if (!it.qs.some(function (q) { return S.sel[q.id]; })) return;
+      it.qs.forEach(function (q) {
+        if (!S.sel[q.id] || S.res[q.id]) return;
+        const truth = Bank.truth(q);
+        if (!truth) return;
+        const ok = sortLetters(S.sel[q.id]) === sortLetters(truth);
+        S.res[q.id] = { ok: ok, ans: S.sel[q.id] };
+        if (S.redo) S.redoRes[q.id] = { a: S.sel[q.id], ok: ok };
+        else Store.record(q.id, S.sel[q.id], ok);
+        n++;
+      });
+      const card = U.$('.card[data-key="' + cssKey(it.key) + '"]', content);
+      if (card) { reState(card); if (S.redo) it.qs.forEach(function (q) { if (S.redoRes[q.id]) Card.reveal(card, q.id); }); }
+    });
+    if (!n) { U.toast('还没有作答的题'); return; }
+    refreshBar(); saveSnapshot();
+    U.toast('已提交 ' + n + ' 题', 2500);
+  }
+
+  function submitItem(item) {
+    let any = false;
+    item.qs.forEach(function (q) {
+      const chosen = S.sel[q.id];
+      if (!chosen || S.res[q.id]) return;
+      const truth = Bank.truth(q);
+      if (!truth) { U.toast('这题还没有正确答案，点「✎答」录入后再提交'); return; }
+      const ok = sortLetters(chosen) === sortLetters(truth);
+      S.res[q.id] = { ok: ok, ans: chosen };
+      if (S.redo) S.redoRes[q.id] = { a: chosen, ok: ok };
+      else Store.record(q.id, chosen, ok);
+      any = true;
+    });
+    if (!any) { U.toast('先选择答案'); return; }
+    const card = U.$('.card[data-key="' + cssKey(item.key) + '"]', content);
+    if (card) {
+      reState(card);
+      if (S.redo) item.qs.forEach(function (q) { if (S.redoRes[q.id]) Card.reveal(card, q.id); });
+      if (S.mode === 'paged') Card.hwRedraw(card);
+    }
+    refreshBar();
+    saveSnapshot();
+    if (Store.get('revealMode') === 'side') showExplain(item.qs[0].id);
+  }
+
+  function revealItem(item) {
+    item.qs.forEach(function (q) {
+      if (S.res[q.id]) return;
+      S.res[q.id] = { ok: null, ans: S.sel[q.id] || '' };
+    });
+    const card = U.$('.card[data-key="' + cssKey(item.key) + '"]', content);
+    if (card) reState(card);
+    refreshBar(); saveSnapshot();
+  }
+
+  function submitRange(from, to) {
+    let n = 0;
+    for (let i = from; i <= to && i < S.items.length; i++) {
+      const it = S.items[i];
+      if (it.qs.some(function (q) { return S.res[q.id]; })) continue;
+      if (!it.qs.some(function (q) { return S.sel[q.id]; })) continue;
+      submitItem(it);
+      n++;
+    }
+    if (!n) U.toast('本组还没有作答');
+  }
+
+  function submitChunk() {
+    if (S.submitMode === 'all') { submitRange(0, S.items.length - 1); return; }
+    const i = S.mode === 'paged' ? S.idx : currentCardIndexOnScreen();
+    if (S.submitMode === 'single') { submitItem(S.items[i]); return; }
+    const start = Math.floor(i / S.chunk) * S.chunk;
+    submitRange(start, Math.min(start + S.chunk - 1, S.items.length - 1));
+  }
+
+  function showExplain(qid) {
+    const q = Bank.q(qid);
+    if (!q) return;
+    const html = '<div class="ans-line" style="margin-bottom:10px;font-size:13px;color:#555">' +
+      '正确答案 <b style="font-family:var(--mono)">' + esc(Bank.truth(q).split('').join(' ')) + '</b>' +
+      '　你的答案 <b style="font-family:var(--mono)">' + esc((S.sel[qid] || '未作答').split('').join(' ')) + '</b></div>' +
+      '<div style="font-family:var(--serif);line-height:1.9;font-size:14.5px">' + esc(q.exp || '（暂无解析）') + '</div>';
+    U.openDrawer('解析 · ' + q.label, html);
+  }
+
+  function toggleChoice(subq, k, el) {
+    if (!subq) return;
+    const qid = subq.dataset.qid;
+    const q = Bank.q(qid);
+    let cur = S.sel[qid] || '';
+    if (q && q.multi) {
+      cur = cur.indexOf(k) >= 0 ? cur.split('').filter(function (x) { return x !== k; }).join('') : (cur + k);
+    } else {
+      cur = (cur === k) ? '' : k;
+    }
+    if (cur) S.sel[qid] = cur; else delete S.sel[qid];
+    reState(el.closest('.card'));
+    refreshBar();
+    saveSnapshot();
+  }
+
+  function keyDialog(item) {
+    const q = item.qs[0];
+    const cur = Bank.truth(q);
+    const picks = {};
+    cur.split('').forEach(function (c) { picks[c] = 1; });
+    const body = U.el('div');
+    const overridden = !!Store.key(q.id);
+    body.innerHTML = '<p class="hint" style="margin-bottom:10px">' +
+      '如果这道题的答案有问题，可以在这里订正「正确答案」，之后判分、错题本都以它为准。<br>' +
+      '题库自带答案：<b style="font-family:var(--mono)">' + esc(q.ans || '（无）') + '</b>' +
+      (overridden ? '　已订正为：<b style="font-family:var(--mono);color:var(--green)">' + esc(Store.key(q.id)) + '</b>' : '') + '</p>';
+    const row = U.el('div', { class: 'picks' });
+    q.opts.forEach(function (o) {
+      const b = U.el('button', { class: 'pick' + (picks[o.k] ? ' sel' : ''), title: o.v }, '<b>' + o.k + '</b>');
+      b.addEventListener('click', function () {
+        picks[o.k] = !picks[o.k];
+        b.classList.toggle('sel', !!picks[o.k]);
+      });
+      row.appendChild(b);
+    });
+    body.appendChild(row);
+    U.modal({
+      title: '订正正确答案 · ' + q.label, body: body, buttons: [
+        { label: '取消' },
+        { label: '无答案', onClick: function () {
+            Store.setKey(q.id, '__none', {
+              label: q.label, subj: q.subj, ans: q.ans || '',
+              stem: (q.stem || '').slice(0, 90)
+            });
+            U.closeModal();
+            U.toast('已标记为「无答案」，这题不参与判分');
+          } },
+          {
+          label: '保存', cls: 'primary', onClick: function () {
+            const v = Object.keys(picks).filter(function (k) { return picks[k]; }).sort().join('');
+            Store.setKey(q.id, v, {
+              label: q.label, subj: q.subj, ans: q.ans || '',
+              stem: (q.stem || '').slice(0, 90)
+            });
+            if (S.res[q.id]) {
+              S.res[q.id].ok = sortLetters(S.sel[q.id] || '') === sortLetters(Bank.truth(q)) && !!S.sel[q.id];
+              Store.record(q.id, S.sel[q.id] || '', S.res[q.id].ok);
+            }
+            const card = U.$('.card[data-key="' + cssKey(item.key) + '"]', content);
+            if (card) reState(card);
+            U.toast(v ? '已保存正确答案 ' + v : '已清除订正');
+          }
+        }
+      ]
+    });
+  }
+
+  function exportDialog() {
+    const box = U.el('div');
+    box.innerHTML = '<p class="hint" style="margin-bottom:10px">导出当前 ' + S.items.length + ' 组题（' + (S.title || '') + '）</p>' +
+      '<label class="chk"><input type="checkbox" data-ex="mark" checked> 高亮与标注</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="note" checked> 笔记（文字+图片）</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="hw" checked> 手写</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="map" checked> 关联导图</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="ans"> 附答案与解析</label>';
+    U.modal({
+      title: '导出 PDF', body: box, buttons: [
+        { label: '取消' },
+        { label: '开始导出', cls: 'primary', onClick: function () {
+            const g = function (k) { return !!box.querySelector('[data-ex="' + k + '"]').checked; };
+            U.closeModal();
+            ExportUI.runItems(S.items.slice(), {
+              title: S.title || '', mark: g('mark'), note: g('note'),
+              hw: g('hw'), map: g('map'), withAnswer: g('ans'), sort: 'seq'
+            });
+          } }
+      ]
+    });
+  }
+
+  function mapDialog(item) {
+    const q = item.qs[0];
+    const body = U.el('div');
+    body.innerHTML = '<p class="hint" data-mp-hint>正在载入导图…</p>';
+    const row = U.el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' });
+    const b1 = U.el('button', { class: 'btn' }, '侧边分屏（左题右图）');
+    const b2 = U.el('button', { class: 'btn' }, '显示在题目下方');
+    b1.disabled = true; b2.disabled = true;
+    b1.addEventListener('click', function () { U.closeModal(); MapUI.openForQuestion(item, 'side'); });
+    b2.addEventListener('click', function () { U.closeModal(); MapUI.openForQuestion(item, 'inline'); });
+    row.appendChild(b1); row.appendChild(b2);
+    body.appendChild(row);
+    U.modal({
+      title: '思维导图', body: body, buttons: [
+        {
+          label: '修改关联页', onClick: function () {
+            U.closeModal();
+            mapPickDialog(q);
+          }
+        },
+        { label: '关闭', cls: 'primary' }
+      ]
+    });
+
+    const hint = body.querySelector('[data-mp-hint]');
+    Bank.ensureMaps().then(function () {
+      const pages = Bank.mapPagesForQuestion(q);
+      if (pages.length) {
+        hint.innerHTML = '找到这一章对应的导图 <b>' + pages.length + '</b> 页（' + esc(pages[0].c || pages[0].s || '') + '）';
+        b1.disabled = false; b2.disabled = false;
+      } else {
+        hint.textContent = Bank.mapSubjectKey(q.subj) ? '这一章暂时没有对应导图' : '人文精神没有配套的思维导图';
+      }
+    }).catch(function () {
+      hint.textContent = '导图载入失败';
+    });
+  }
+
+  function mapPickDialog(q) {
+    const m = window.XZ && window.XZ.maps;
+    if (!m) { U.toast('导图还没载入'); return; }
+    const cur = Store.mapFix(q.id) || [];
+    const body = U.el('div');
+    body.innerHTML = '<p class="hint" style="margin-bottom:10px">当前：' +
+      (cur.length ? ('第 ' + cur.join('、') + ' 页') : '按科目+章节自动匹配') + '</p>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+      '<input class="input" data-mp-in type="number" min="1" max="' + m.pages.length + '" placeholder="页码" style="width:90px">' +
+      '<span class="hint">/ ' + m.pages.length + ' 页</span>' +
+      '<button class="btn sm" data-mp-set="1">设为这一页</button>' +
+      '<button class="btn ghost sm" data-mp-clear="1">恢复自动匹配</button></div>';
+    U.modal({
+      title: '修改导图关联 · ' + (q.label || ''),
+      body: body, buttons: [{ label: '关闭' }]
+    });
+    body.addEventListener('click', function (e) {
+      if (e.target.closest('[data-mp-set]')) {
+        const n = parseInt((body.querySelector('[data-mp-in]') || {}).value, 10);
+        if (!n || n < 1 || n > m.pages.length) { U.toast('页码不合法'); return; }
+        Store.setMapFix(q.id, [n]);
+        U.closeModal();
+        U.toast('已关联到第 ' + n + ' 页');
+        return;
+      }
+      if (e.target.closest('[data-mp-clear]')) {
+        Store.setMapFix(q.id, null);
+        U.closeModal();
+        U.toast('已恢复自动匹配');
+      }
+    });
+  }
+
+  function linkDialog(item) {
+    const q0 = item.qs[0];
+    const body = U.el('div');
+    body.innerHTML = '<input class="input" data-lk placeholder="搜题干 / 年份 / 知识点，找到相似的题" style="width:100%">' +
+      '<div class="hint" style="margin:8px 0">已关联：<span data-lk-count>' + Store.linksOf(q0.id).length + '</span> 题（双向）</div>' +
+      '<div data-lk-body class="lk-body"></div>';
+    U.modal({ title: '关联相似题（对照模式）', body: body, buttons: [{ label: '关闭' }] });
+
+    const inp = body.querySelector('[data-lk]');
+    const box = body.querySelector('[data-lk-body]');
+    const cnt = body.querySelector('[data-lk-count]');
+
+    function refreshCount() {
+      cnt.textContent = Store.linksOf(q0.id).length;
+      const card = U.$('.card[data-key="' + cssKey(item.key) + '"]', content);
+      if (card) Card.renderLinks(card, q0);
+    }
+
+    function render(rows) {
+      if (!rows.length) { box.innerHTML = '<div class="empty">没有结果</div>'; return; }
+      box.innerHTML = rows.map(function (q) {
+        const linked = Store.linksOf(q0.id).indexOf(q.id) >= 0;
+        const lab = q.mock ? ('模拟 · ' + (q.set || '') + ' 第' + q.n + '题') : q.label;
+        return '<div class="lk-row"><div class="grow">' +
+          '<div class="lk-t">' + esc(q.stem.slice(0, 70)) + (q.stem.length > 70 ? '…' : '') + '</div>' +
+          '<div class="hint">' + esc(lab) + ' · ' + esc(q.subj) + '</div></div>' +
+          '<button class="btn sm ' + (linked ? 'on' : '') + '" data-lkt="' + esc(q.id) + '">' +
+          (linked ? '已关联' : '关联') + '</button></div>';
+      }).join('');
+    }
+
+    const doSearch = U.debounce(function () {
+      const term = inp.value.trim();
+      if (!term) { box.innerHTML = '<div class="hint">输入关键词开始搜索</div>'; return; }
+      const rows = Bank.search(term, { scope: 'all', fields: ['stem', 'meta'], limit: 20 })
+        .filter(function (q) { return q.id !== q0.id; });
+      render(rows);
+    }, 220);
+
+    let timer = null;
+    inp.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(doSearch, 220); });
+    box.addEventListener('click', function (e) {
+      const b = e.target.closest('[data-lkt]');
+      if (!b) return;
+      const on = Store.toggleLink(q0.id, b.dataset.lkt);
+      b.classList.toggle('on', on);
+      b.textContent = on ? '已关联' : '关联';
+      refreshCount();
+      U.toast(on ? '已关联（双向）' : '已取消关联');
+    });
+
+    Bank.ensure(Bank.subjectNames()).then(function () { return Bank.ensureMock(); }).then(function () {
+      inp.focus();
+      box.innerHTML = '<div class="hint">输入关键词开始搜索</div>';
+    });
+  }
+
+  function showQuestionModal(qid, fromItem) {
+    const q = Bank.q(qid);
+    if (!q) return;
+    const fromCard = fromItem ? U.$('.card[data-key="' + cssKey(fromItem.key) + '"]', content) : null;
+    const truth = Bank.truth(q);
+    const body = U.el('div');
+    body.innerHTML = '<div style="font-family:var(--serif);line-height:1.8;font-size:14.5px;margin-bottom:10px">' + esc(q.stem) + '</div>' +
+      '<ul class="opts">' + q.opts.map(function (o) {
+        const ok = truth.indexOf(o.k) >= 0;
+        return '<li class="opt' + (ok ? ' correct' : '') + '"><span class="k">' + o.k + '.</span>' +
+          '<span class="t">' + esc(o.v) + '</span></li>';
+      }).join('') + '</ul>' +
+      (q.exp ? '<div class="exp" style="margin-top:10px"><div class="body">' + esc(q.exp) + '</div></div>' : '');
+    U.modal({
+      title: (q.mock ? '模拟题' : q.label) + ' · ' + q.subj, body: body,
+      buttons: [
+        {
+          label: '取消关联', onClick: function () {
+            if (!fromItem) return;
+            Store.toggleLink(fromItem.qs[0].id, qid);
+            if (fromCard) Card.renderLinks(fromCard, fromItem.qs[0]);
+            U.toast('已取消关联');
+          }
+        },
+        { label: '关闭', cls: 'primary' }
+      ]
+    });
+  }
+
+  window.__keyDialog = keyDialog;
+
+  function flagDialog(qid, done) {
+    const cur = Store.flag(qid);
+    const body = U.el('div');
+    body.innerHTML = '<p class="hint" style="margin-bottom:12px">给这道题打个标记，之后可以按标记筛选、组题时排除。</p>';
+    const list = U.el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' });
+    const types = Card.FLAG_ORDER.concat(['']);
+    types.forEach(function (t) {
+      const b = U.el('button', { class: 'btn sm' + (cur && cur.t === t ? ' on' : '') }, t ? Card.FLAGS[t] : '清除标记');
+      b.addEventListener('click', function () {
+        Store.setFlag(qid, t || null);
+        if (t === 'noanswer') {
+          const q = Bank.q(qid) || {};
+          Store.setKey(qid, '__none', { label: q.label || '', subj: q.subj || '', ans: q.ans || '', stem: (q.stem || '').slice(0, 90) });
+        } else if (Store.key(qid) === '__none') {
+          Store.setKey(qid, '');
+        }
+        U.closeModal();
+        if (done) done();
+        U.toast(t ? '已标记为「' + Card.FLAGS[t] + '」' : '已清除标记');
+      });
+      list.appendChild(b);
+    });
+    body.appendChild(list);
+    U.modal({ title: '标记这道题', body: body, buttons: [{ label: '关闭' }] });
+  }
+
+  /* ---------------- 导航 / 视图 ---------------- */
+  function go(i) {
+    if (S.mode !== 'paged') {
+      const cards = U.$$('.card', content);
+      const c = cards[U.clamp(i, 0, cards.length - 1)];
+      if (c) {
+        window.scrollTo({ top: c.getBoundingClientRect().top + window.scrollY - 120, behavior: 'smooth' });
+        S.idx = i; refreshBar();
+      }
+      return;
+    }
+    if (i < 0 || i >= S.items.length) return;
+    S.idx = i;
+    content.innerHTML = '';
+    const card = makeCard(S.items[i], i);
+    content.appendChild(card);
+    Card.attach(content);
+    Card.hwRedraw(card);
+    window.scrollTo(0, 0);
+    refreshBar();
+    saveSnapshot();
+  }
+
+  function toggleMode() {
+    S.mode = S.mode === 'scroll' ? 'paged' : 'scroll';
+    Store.set('mode', S.mode);
+    document.body.classList.toggle('has-pager', S.mode === 'paged');
+    pager.hidden = S.mode !== 'paged';
+    bar.querySelector('[data-tool="mode"]').textContent = S.mode === 'scroll' ? '单题模式' : '滚动模式';
+    renderContent();
+    if (S.mode === 'paged') { S.idx = Math.min(S.idx, S.items.length - 1); go(S.idx); }
+    Card.attach(content);
+    refreshBar();
+    saveSnapshot();
+  }
+
+  function refreshBar() {
+    if (!bar) return;
+    const total = S.items.length;
+    const done = S.items.filter(function (it) { return it.qs.every(function (q) { return S.res[q.id]; }); }).length;
+    bar.querySelector('[data-prog]').textContent = (S.idx + 1) + ' / ' + total + '　已做 ' + done;
+    const pct = total ? Math.round(done * 100 / total) : 0;
+    bar.querySelector('[data-bar]').style.width = pct + '%';
+    const pos = pager && pager.querySelector('[data-pos]');
+    if (pos) pos.textContent = (S.idx + 1) + ' / ' + total;
+  }
+
+  function openSheet() {
+    const body = U.el('div');
+    const groups = [
+      { t: 'A 型题', test: function (q) { return q.t === 'A' || q.t === 'M'; } },
+      { t: 'B 型题（共用备选）', test: function (q) { return q.t === 'B'; } },
+      { t: 'C 型题', test: function (q) { return q.t === 'C'; } },
+      { t: 'X 型题（多选）', test: function (q) { return q.t === 'X'; } }
+    ];
+    body.innerHTML = '<p class="hint" style="margin-bottom:14px">灰=已选未交　绿=对　红=错　右上角红点=已标记</p>';
+    groups.forEach(function (g) {
+      const rows = [];
+      S.items.forEach(function (it, i) { if (g.test(it.qs[0])) rows.push(i); });
+      if (!rows.length) return;
+      const h = U.el('div', { class: 'sheet-hd' }, g.t + '　<span class="hint">' + rows.length + ' 题</span>');
+      body.appendChild(h);
+      const grid = U.el('div', { class: 'sheet' });
+      rows.forEach(function (i) {
+        const it = S.items[i], q0 = it.qs[0];
+        const sub = it.qs.every(function (q) { return S.res[q.id]; });
+        const ok = it.qs.every(function (q) { return S.res[q.id] && S.res[q.id].ok; });
+        const cls = 'btn-sheet' + (sub ? (ok ? ' ok' : ' no') : (S.sel[q0.id] ? ' done' : '')) + (i === S.idx ? ' cur' : '') + (Store.flag(q0.id) ? ' flag' : '');
+        grid.appendChild(U.el('button', { class: cls, 'data-jump': i, title: q0.label }, String(i + 1)));
+      });
+      body.appendChild(grid);
+    });
+    U.openDrawer('答题卡 · ' + (S.idx + 1) + '/' + S.items.length, body);
+  }
+
+  function exit() {
+    U.modal({
+      title: '退出练习？', body: '<p>作答记录已经保存，可以随时从「继续上次」进入。</p>',
+      buttons: [
+        { label: '继续做题' },
+        {
+          label: '退出', cls: 'primary', onClick: function () {
+            saveSnapshot();
+            if (S.redo && Object.keys(S.redoRes).length) {
+      Object.keys(S.redoRes).forEach(function (qid) {
+        Store.record(qid, S.redoRes[qid].a, S.redoRes[qid].ok);
+      });
+      U.toast('重做结果已保存（' + Object.keys(S.redoRes).length + ' 题）', 3000);
+    }
+    S.redo = false; S.redoRes = {};
+    S.items = [];
+            if (pager) pager.remove();
+            document.body.classList.remove('has-pager');
+            location.hash = '#/home';
+          }
+        }
+      ]
+    });
+  }
+
+  function cssKey(k) { return String(k).replace(/["\\]/g, '\\$&'); }
+})();
+
+
