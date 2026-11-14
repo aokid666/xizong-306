@@ -138,6 +138,16 @@
 
     // 点击当前页的导航项时也重新渲染（否则 hash 不变，看起来「没反应」）
     document.addEventListener('click', function (e) {
+    const exYc = e.target.closest('[data-export-yc]');
+    if (exYc) {
+      e.preventDefault(); e.stopPropagation();
+      const subj = exYc.dataset.exportYc;
+      Bank.ensure(Bank.subjectNames()).then(function () {
+        const qs = (Bank.yicuItems ? Bank.yicuItems(subj) : []);
+        ExportUI.runItems(Bank.itemsOf(qs), { title: '易错小结 · ' + subj });
+      });
+      return;
+    }
     const exSubj = e.target.closest('[data-export-subj]');
     if (exSubj) {
       e.preventDefault();
