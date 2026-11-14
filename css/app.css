@@ -769,3 +769,6 @@ sup.fn{font-size:6.5pt;color:#3b6fd4;vertical-align:super}
 @media print{
   .mk-hl,.pg-star,mark{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+.mk-hl{background:#ffe98a!important;border-bottom:1px solid #d9a800;border-left:2px solid #d9a800;padding:0 2px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.mk-ul{border-bottom:1.5px solid #3b6fd4}
