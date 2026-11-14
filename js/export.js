@@ -30,12 +30,14 @@
     if (!text) return list;
     return list.map(function (m) {
       var s0 = m.s, e0 = m.e;
-      if (e0 > text.length || text.slice(s0, e0) !== m.tx) {
-        var idx = m.tx ? text.indexOf(m.tx) : -1;
-        if (idx >= 0) { s0 = idx; e0 = idx + m.tx.length; }
-        else { s0 = Math.min(s0, text.length); e0 = Math.min(e0, text.length); }
+      var tx = m.tx || '';
+      if (tx && (e0 > text.length || text.slice(s0, e0) !== tx)) {
+        var idx = text.indexOf(tx);
+        if (idx >= 0) { s0 = idx; e0 = idx + tx.length; }
       }
-      return { i: m.i, s: s0, e: e0, k: m.k, n: m.n, tx: m.tx };
+      s0 = Math.max(0, Math.min(s0, text.length));
+      e0 = Math.max(s0, Math.min(e0, text.length));
+      return { i: m.i, s: s0, e: e0, k: m.k, n: m.n, tx: tx };
     }).filter(function (m) { return m.e > m.s; });
   }
 
@@ -191,7 +193,8 @@
       }
       if (opts.note) h += noteHTML(q.id, imgs);
     });
-    h += hwOverlay(q0.id) + '</div>';
+    if (opts.hw) h += hwOverlay(q0.id);
+    h += '</div>';
     if (opts.map) h += mapHTML(q0);
     (function () {
       var seen = {};
