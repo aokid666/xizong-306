@@ -292,6 +292,9 @@
         withAnswer: !!opts.withAnswer, sort: opts.sort || 'bank'
       };
       var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
+      var mkCount = 0;
+      arr.forEach(function (it) { it.qs.forEach(function (q) { mkCount += Store.marks(q.id).length; }); });
+      if (opts.mark !== false && mkCount === 0) U.toast('提示：这批题里没有高亮/标注记录', 3000);
       box.innerHTML = buildPages(arr, full, imgs).join('');
       document.body.classList.add('printing');
       var back = function () { document.body.classList.remove('printing'); window.removeEventListener('afterprint', back); };
@@ -317,6 +320,9 @@
       var box = document.getElementById('print-root');
       prepAll(items, opts).then(function (imgs) {
         var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
+      var mkCount = 0;
+      arr.forEach(function (it) { it.qs.forEach(function (q) { mkCount += Store.marks(q.id).length; }); });
+      if (opts.mark !== false && mkCount === 0) U.toast('提示：这批题里没有高亮/标注记录', 3000);
         box.innerHTML = buildPages(arr, opts, imgs).join('');
         document.body.classList.add('printing');
         var list = Array.prototype.slice.call(box.querySelectorAll('img'));
