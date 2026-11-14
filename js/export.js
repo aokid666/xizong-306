@@ -169,9 +169,14 @@
     if (fav) h += '<div class="pg-star ' + (odd ? 'r' : 'l') + '">' + starSvg() + '</div>';
     h += '<div class="pg-hd">' + esc(head) + '</div>';
     h += '<div class="pg-body">';
-    if (item.vignette) h += '<div class="pg-vig">' + esc(item.vignette) + '</div>';
+    var fnotes0 = [];
+    if (item.vignette) {
+      var rv = renderMarked(item.vignette, opts.mark ? marksOf(q0.id, 'case', item.vignette) : []);
+      (rv.notes || []).forEach(function (n) { fnotes0.push(n); });
+      h += '<div class="pg-vig">' + (typeof rv === 'string' ? esc(item.vignette) : rv.html) + '</div>';
+    }
 
-    var fnotes = [];
+    var fnotes = fnotes0;
     item.qs.forEach(function (q, i) {
       var tail = (item.vignette && item.tails && item.tails[i] != null) ? item.tails[i] : q.stem;
       var r = renderMarked(tail, opts.mark ? marksOf(q.id, 'stem', tail) : []);
