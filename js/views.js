@@ -1345,7 +1345,7 @@
         html += '<div class="row" data-yc="' + esc(s) + '"><div class="grow">' +
           '<div class="t">' + esc(s) + ' 易错 ' + n + ' 题</div>' +
           '<div class="d">按讲义顺序排列，直接开刷</div></div>' +
-          '<span class="num">' + n + '</span><span class="go">开始 →</span></div>';
+          '<span class="num">' + n + '</span><span class="go">开始 →</span>' + '<button class="row-act" data-export-yc="' + esc(s) + '">导出</button>' + '</div>';
       });
       html += '</div>';
       html += '<p class="hint" style="margin-top:20px">这些题本身就在真题库里，做错的会自动进「错题」，收藏与标记同样通用。</p>';
