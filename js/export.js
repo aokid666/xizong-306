@@ -193,6 +193,16 @@
     });
     h += hwOverlay(q0.id) + '</div>';
     if (opts.map) h += mapHTML(q0);
+    (function () {
+      var seen = {};
+      fnotes.forEach(function (n) { seen[n] = 1; });
+      item.qs.forEach(function (q) {
+        Store.marks(q.id).forEach(function (m) {
+          if (m.n && !seen[m.n]) { seen[m.n] = 1; fnotes.push(m.n); }
+        });
+      });
+    })();
+
     if (fnotes.length) {
       h += '<div class="pg-fn"><div class="pg-lab">标注</div>' + fnotes.map(function (n, i) {
         return '<div>' + (i + 1) + '．' + esc(n) + '</div>';
