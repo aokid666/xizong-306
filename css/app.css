@@ -764,3 +764,8 @@ sup.fn{font-size:6.5pt;color:#3b6fd4;vertical-align:super}
   .page-hd h1{font-size:24px}
   .seg button{font-size:12.5px;padding:6px 10px}
 }
+
+.mk-hl{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#ffe98a;padding:0 1px}
+@media print{
+  .mk-hl,.pg-star,mark{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
