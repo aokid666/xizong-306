@@ -21,7 +21,9 @@
         s = idx; e = idx + m.tx.length;
       }
       if (!(e > s) || s < 0 || e > text.length) return;
-      out.push({ i: m.i, k: m.k || 'hl', n: m.n || '', s: s, e: e });
+      const color = Number(m.c);
+      out.push({ i: m.i, k: m.k || 'hl', n: m.n || '', s: s, e: e,
+        c: Number.isInteger(color) && color >= 1 && color <= 5 ? color : 0 });
     });
     return out;
   }
@@ -108,14 +110,14 @@
       '<button class="icon-btn" data-act="hw" title="手写批注">✍</button>' +
       '<button class="icon-btn" data-act="map" title="这一章的思维导图">图</button>' +
       '<button class="icon-btn" data-act="lecture" title="讲义（可滚动/翻页/手写/框选进笔记）">讲</button>' +
-      '<button class="icon-btn" data-act="link" title="关联相似题（对照模式）">链</button>' +
+      '<button class="icon-btn" data-act="link" title="关联相似题">链</button>' +
       '</div>' +
       '<div class="link-row" hidden></div></div>';
   }
 
-  function optionsHTML(q) {
+  function optionsHTML(q, locked) {
     return '<ul class="opts">' + q.opts.map(function (o) {
-      return '<li class="opt" data-k="' + o.k + '">' +
+      return '<li class="opt' + (locked ? ' locked' : '') + '" data-k="' + o.k + '">' +
         '<span class="k">' + o.k + '.</span>' +
         '<span class="t" data-field="opt' + o.k + '" data-raw="' + esc(o.v) + '">' + esc(o.v) + '</span></li>';
     }).join('') + '</ul>';
@@ -136,7 +138,7 @@
     }).join('') + '</div>';
   }
 
-  function subqHTML(q, item, ctx, idx) {
+  function subqHTML(q, item, idx, preview) {
     const multi = q.multi;
     let disp = (item.vignette && item.tails && item.tails[idx] != null) ? item.tails[idx] : q.stem;
     if (item.vignette && disp && disp.indexOf(item.vignette) === 0) {
@@ -147,24 +149,28 @@
       head = '<div class="subq-hd"><b>第 ' + (idx + 1) + ' 小问</b>' +
         '<span>' + esc(q.label) + '</span>' +
         '<span style="flex:1"></span>' +
-        '<button class="btn ghost sm" data-act="note">✎ 笔记</button>' +
-        '<button class="btn ghost sm" data-act="reveal">答案</button>' +
+        (preview ? '' : '<button class="btn ghost sm" data-act="note">✎ 笔记</button>' +
+          '<button class="btn ghost sm" data-act="reveal">答案</button>') +
         '</div>';
     }
+    const explanation = q.exp || '（暂无解析）';
+    const text = markedHTML(explanation, Store.marks(q.id).filter(function (m) { return m.f === 'exp'; }));
+    const details = preview
+      ? '<details class="exp"><summary>查看答案和解析</summary><div class="body">' +
+        '<b>正确答案：' + esc(Bank.truth(q) || '暂无答案') + '</b><div>' + text + '</div></div></details>'
+      : '<div class="verdict" hidden></div>' +
+        '<details class="exp" hidden><summary>解析' + (multi ? '（多选）' : '') + '</summary>' +
+        '<div class="body" data-field="exp" data-owner="' + q.id + '" data-raw="' + esc(explanation) + '">' +
+        text + '</div></details><div class="note-wrap" data-owner="' + q.id + '"></div>';
     return '<div class="subq" data-qid="' + q.id + '">' +
       head +
       '<div class="stem" data-field="stem" data-raw="' + esc(disp) + '">' + markedHTML(disp, Store.marks(q.id).filter(function (m) { return m.f === 'stem'; })) + '</div>' +
-      (item.bGroup ? picksHTML(q) : optionsHTML(q)) +
-      '<div class="verdict" hidden></div>' +
-      '<details class="exp" hidden><summary>解析' + (multi ? '（多选）' : '') + '</summary>' +
-      '<div class="body" data-field="exp" data-owner="' + q.id + '" data-raw="' + esc(q.exp || '（暂无解析）') + '">' +
-      markedHTML(q.exp || '（暂无解析）', Store.marks(q.id).filter(function (m) { return m.f === 'exp'; })) +
-      '</div></details>' +
-      '<div class="note-wrap" data-owner="' + q.id + '"></div>' +
+      (item.bGroup ? (preview ? '' : picksHTML(q)) : optionsHTML(q, preview)) +
+      details +
       '</div>';
   }
 
-  function build(item, index, ctx) {
+  function questionHTML(item, preview) {
     // 多小问（病例题/B型题）如果数据里没标出公共题干，这里现场算一次，避免每问都重复整段病例
     if (item.qs && item.qs.length > 1 && (!item.vignette || !item.tails || item.tails.length !== item.qs.length)) {
       let pre = item.qs[0].stem || '';
@@ -184,18 +190,21 @@
       }
     }
 
-    const card = document.createElement('article');
-    card.className = 'card';
-    card.dataset.key = item.key;
-    card.dataset.i = index;
-
     let body = '';
     if (item.bGroup) body += sharedOptionsHTML(item);
     if (item.vignette) {
       body += '<div class="vignette" data-field="case" data-owner="' + item.qs[0].id + '" data-raw="' + esc(item.vignette) + '">' +
         markedHTML(item.vignette, Store.marks(item.qs[0].id).filter(function (m) { return m.f === 'case'; })) + '</div>';
     }
-    body += item.qs.map(function (q, i) { return subqHTML(q, item, ctx, i); }).join('');
+    return body + item.qs.map(function (q, i) { return subqHTML(q, item, i, preview); }).join('');
+  }
+
+  function build(item, index, ctx) {
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.dataset.key = item.key;
+    card.dataset.i = index;
+    const body = questionHTML(item, false);
 
     const showSubmit = ctx.showSubmit(item);
     const foot = '<div class="case-foot">' +
@@ -339,35 +348,55 @@
       const hw = Store.hw(q0.id);
       hwBtn.classList.toggle('on', card.classList.contains('hw-on') || !!(hw && hw.s && hw.s.length));
     }
-    const linkBtn = card.querySelector('[data-act="link"]');
-    if (linkBtn) linkBtn.classList.toggle('on', Store.linksOf(q0.id).length > 0);
-    renderLinks(card, q0);
+    renderLinks(card);
   }
 
 ﻿  /* ---------------- 关联题（对照模式） ---------------- */
-  function renderLinks(card, q0) {
+  function linkedItems(item) {
+    const own = new Set(item.qs.map(function (q) { return q.id; }));
+    const targets = new Map();
+    item.qs.forEach(function (q) {
+      Store.linksOf(q.id).forEach(function (id) {
+        if (own.has(id)) return;
+        const target = Bank.q(id);
+        const group = target && Bank.relatedItem(target);
+        if (group && group.qs.some(function (member) { return own.has(member.id); })) return;
+        const key = group ? group.key : id;
+        if (!targets.has(key)) targets.set(key, { id: id, item: group, pairs: [] });
+        targets.get(key).pairs.push([q.id, id]);
+      });
+    });
+    return targets;
+  }
+
+  function renderLinks(card) {
     const row = card.querySelector('.link-row');
     if (!row) return;
-    const ids = Store.linksOf(q0.id);
+    const q0 = card._item.qs[0];
+    const links = Array.from(linkedItems(card._item).values());
+    const linkBtn = card.querySelector('[data-act="link"]');
+    if (linkBtn) linkBtn.classList.toggle('on', links.length > 0);
     const done = !!Store.prog(q0.id);
-    if (!ids.length && !done && !Store.key(q0.id)) { row.hidden = true; row.innerHTML = ''; return; }
+    if (!links.length && !done && !Store.key(q0.id)) { row.hidden = true; row.innerHTML = ''; return; }
     row.hidden = false;
-    const fixed = !!Store.key(q0.id);
-    if (Store.key(q0.id) === '__none') {
-      row.hidden = false;
-      row.innerHTML = '<button class="link-btn is-on" data-fixkey="1" title="已标记无答案（点此修改）">无答案</button>';
-      return;
-    }
-    row.innerHTML = '<button class="link-btn' + (fixed ? ' is-on' : '') + '" data-fixkey="1" title="' +
+    const fixed = Store.key(q0.id);
+    const actions = fixed === '__none'
+      ? '<button class="link-btn is-on" data-fixkey="1" title="已标记无答案（点此修改）">无答案</button>'
+      : '<button class="link-btn' + (fixed ? ' is-on' : '') + '" data-fixkey="1" title="' +
         (fixed ? '答案已订正（点此再改）' : '矫正这道题的答案') + '">' + (fixed ? '已订正' : '订正') + '</button>' +
       '<button class="link-btn' + (Store.fbGet(q0.id) ? ' is-on' : '') + '" data-fb="1" title="这题有问题">反馈</button>' +
-      (done ? '<button class="link-btn" data-redo-one="1" title="重做这题">重做</button>' : '') +
-      (ids.length ? '<span class="hint">关联</span>' : '') + ids.map(function (id) {
-      const q = Bank.q(id);
-      if (!q) return '';
-      const lab = q.mock ? ('模拟·' + (q.set || '') + ' 第' + q.n + '题') : q.label;
-      return '<button class="link-chip" data-linkto="' + esc(id) + '">' + esc(lab) + ' ×</button>';
+      (done ? '<button class="link-btn" data-redo-one="1" title="重做这题">重做</button>' : '');
+    row.innerHTML = actions + (links.length ? '<span class="hint">关联</span>' : '') + links.map(function (link) {
+      const q = link.item && link.item.qs[0];
+      const lab = q ? relatedTitle(link.item) : link.id;
+      return '<button class="link-chip" data-linkto="' + esc(link.id) + '">' + esc(lab) + '</button>';
     }).join('');
+  }
+
+  function relatedTitle(item) {
+    const q = item.qs[0];
+    const label = q.mock ? (q.set || '模拟题') + ' · ' + q.label : q.label;
+    return label + (item.qs.length > 1 ? ' · ' + item.qs.length + ' 小问' : '');
   }
 
   /* ---------------- 笔记面板：文字 / 图片 段落，可自由排序 ---------------- */
@@ -595,6 +624,42 @@
       return { a: -1, bt: bd ? (bd.getBoundingClientRect().top - cvr.top) : 0 };
     },
 
+    textAnchorAt(card, e, scale) {
+      if (!document.caretRangeFromPoint) return null;
+      const cv = this.canvas(card);
+      const oldEvents = cv.style.pointerEvents;
+      cv.style.pointerEvents = 'none';
+      const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+      cv.style.pointerEvents = oldEvents;
+      const node = range && range.startContainer;
+      const field = node && node.parentElement && node.parentElement.closest('[data-field]');
+      if (!field || !card.contains(field) || node.nodeType !== Node.TEXT_NODE) return null;
+
+      const walker = document.createTreeWalker(field, NodeFilter.SHOW_TEXT);
+      let index = 0;
+      while (walker.nextNode()) {
+        const part = walker.currentNode;
+        if (part.parentElement.closest('sup')) continue;
+        if (part !== node) { index += part.length; continue; }
+        let offset = Math.min(range.startOffset, part.length - 1);
+        if (offset < 0) return null;
+        // Keep Unicode surrogate pairs together when the export wraps the character.
+        if (offset > 0 && /[\uDC00-\uDFFF]/.test(part.data[offset])) offset--;
+        range.setStart(part, offset);
+        range.setEnd(part, offset + (part.data.codePointAt(offset) > 0xFFFF ? 2 : 1));
+        const rect = range.getBoundingClientRect();
+        const font = parseFloat(getComputedStyle(field).fontSize);
+        const dx = e.clientX - rect.left, dy = e.clientY - rect.top;
+        if (Math.abs(dx) > font * 2 || Math.abs(dy) > font * 2) return null;
+        const sub = field.closest('.subq');
+        return {
+          qid: field.dataset.owner || (sub && sub.dataset.qid) || card._item.qs[0].id,
+          field: field.dataset.field, index: index + offset, font: font, scale: scale, dx: dx, dy: dy
+        };
+      }
+      return null;
+    },
+
     blockShift(card, st, scale) {
       if (st.a == null || st.a < 0 || st.ay == null) return 0;
       const blocks = card.querySelectorAll('.subq');
@@ -638,7 +703,7 @@
       const cv = this.canvas(card);
       if (cv._bound) return;
       cv._bound = true;
-      let drawing = false, cur = null;
+      let drawing = false, cur = null, scale = 1;
 
       const pos = function (e) {
         const r = cv.getBoundingClientRect();
@@ -659,11 +724,15 @@
         drawing = true;
         card._hwDrawing = true;
         const anc = HW.anchorAt(card, e.clientX, e.clientY);
-        cur = {
-          p: [p[0], p[1]], c: cv._color || '#191919', w: cv._width || 3,
-          a: anc.a, ay: p[1] - anc.bt
-        };
         const d = HW.data(card);
+        if (!d.w) { d.w = cv._lw; d.h = cv._lh; }
+        scale = cv._lw / d.w;
+        cur = {
+          p: [p[0] / scale, p[1] / scale], c: cv._color || '#191919', w: (cv._width || 3) / scale,
+          a: anc.a, ay: (p[1] - anc.bt) / scale
+        };
+        const textAnchor = HW.textAnchorAt(card, e, scale);
+        if (textAnchor) cur.textAnchor = textAnchor;
         d.s.push(cur);
         HW.redraw(card);
       });
@@ -672,7 +741,7 @@
         if (!drawing) return;
         e.preventDefault();
         const p = pos(e);
-        cur.p.push(p[0], p[1]);
+        cur.p.push(p[0] / scale, p[1] / scale);
         HW.redraw(card);
       });
 
@@ -681,7 +750,6 @@
         drawing = false;
         card._hwDrawing = false;
         const d = HW.data(card);
-        d.w = cv._lw; d.h = cv._lh;
         Store.setHw(card._item.qs[0].id, d);
       };
       cv.addEventListener('pointerup', end);
@@ -764,50 +832,55 @@
   };
 
   /* ---------------- 选区 -> 划线 ---------------- */
-  let floatEl = null;
-  function hideFloat() { if (floatEl) { floatEl.remove(); floatEl = null; } }
+  let floatEl = null, floatSelection = null;
+  function hideFloat() {
+    if (floatEl) floatEl.remove();
+    floatEl = null;
+    floatSelection = null;
+  }
 
-  function showFloat(x, y, buttons, onColor, curColor) {
+  function floatButton(button, action) {
+    button.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    button.addEventListener('touchstart', function (e) { e.preventDefault(); }, { passive: false });
+    button.addEventListener('touchend', function (e) {
+      e.preventDefault();
+      if (document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY) === button) action();
+    }, { passive: false });
+    button.addEventListener('click', action);
+    return button;
+  }
+
+  function showFloat(x, top, bottom, buttons, onColor, curColor) {
     hideFloat();
-    const f = U.el('div', { class: 'float-tools' });
+    const f = U.el('div', { class: 'float-tools', role: 'group', 'aria-label': '文字标注' });
     if (onColor) {
+      const names = ['黄色', '绿色', '蓝色', '橙色', '紫色'];
+      const palette = U.el('div', { class: 'ft-palette', role: 'group', 'aria-label': '标注颜色' });
       for (let i = 1; i <= 5; i++) {
-        const dot = U.el('span', { class: 'ft-color c' + i + (i === curColor ? ' on' : ''), 'data-c': String(i) });
-        dot.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
-        dot.addEventListener('touchstart', function (e) {
-          e.preventDefault(); e.stopPropagation();
-          onColor(i);
-          f.querySelectorAll('.ft-color').forEach(function (d) { d.classList.toggle('on', d.dataset.c === String(i)); });
-        }, { passive: false });
-        dot.addEventListener('click', function (e) {
-          e.preventDefault(); e.stopPropagation();
-          onColor(i);
-          f.querySelectorAll('.ft-color').forEach(function (d) { d.classList.toggle('on', d.dataset.c === String(i)); });
+        const dot = U.el('button', {
+          type: 'button', class: 'ft-color c' + i, title: names[i - 1],
+          'aria-label': names[i - 1], 'aria-pressed': String(i === curColor)
         });
-        f.appendChild(dot);
+        palette.appendChild(floatButton(dot, function () {
+          onColor(i);
+          palette.querySelectorAll('button').forEach(function (d) {
+            d.setAttribute('aria-pressed', String(d === dot));
+          });
+        }));
       }
-      f.appendChild(U.el('span', { class: 'ft-sep' }));
+      f.appendChild(palette);
     }
+    const actions = U.el('div', { class: 'ft-actions' });
     buttons.forEach(function (b) {
-      const btn = U.el('button', { text: b.label });
-      let fired = false;
-      btn.addEventListener('mousedown', function (e) { e.preventDefault(); e.stopPropagation(); });
-      btn.addEventListener('touchstart', function (e) {
-        e.preventDefault(); e.stopPropagation();
-        fired = true;
-        b.fn();
-      }, { passive: false });
-      btn.addEventListener('click', function (e) {
-        e.preventDefault(); e.stopPropagation();
-        if (fired) { fired = false; return; }
-        b.fn();
-      });
-      f.appendChild(btn);
+      const btn = U.el('button', { type: 'button', class: b.primary ? 'ft-primary' : '', text: b.label });
+      actions.appendChild(floatButton(btn, b.fn));
     });
+    f.appendChild(actions);
     document.body.appendChild(f);
     const r = f.getBoundingClientRect();
     f.style.left = Math.max(8, Math.min(window.innerWidth - r.width - 8, x - r.width / 2)) + 'px';
-    f.style.top = Math.max(8, y - r.height - 8) + 'px';
+    const above = top - r.height - 8;
+    f.style.top = Math.max(8, above >= 8 ? above : Math.min(bottom + 8, window.innerHeight - r.height - 8)) + 'px';
     floatEl = f;
   }
 
@@ -821,7 +894,9 @@
       } else if (n.nodeName === 'SUP' && n.classList && n.classList.contains('mk')) {
         return;
       } else {
-        for (let i = 0; i < n.childNodes.length; i++) { walk(n.childNodes[i]); if (found !== null) return; }
+        const limit = n === node ? offset : n.childNodes.length;
+        for (let i = 0; i < limit; i++) { walk(n.childNodes[i]); if (found !== null) return; }
+        if (n === node) found = total;
       }
     })(el);
     return found == null ? 0 : found;
@@ -854,6 +929,8 @@
         const owner = fieldEl.dataset.owner || (subq ? subq.dataset.qid : card._item.qs[0].id);
         const off = offsetsIn(fieldEl, range);
         if (off[1] - off[0] < 1) return;
+        if (floatSelection && floatSelection.fieldEl === fieldEl &&
+          floatSelection.start === off[0] && floatSelection.end === off[1]) return;
         const tx = range.toString();
         const rect = range.getBoundingClientRect();
 
@@ -865,23 +942,25 @@
         };
 
         let curColor = 1;
-        showFloat(rect.left + rect.width / 2, rect.top, [
-          { label: '高亮', fn: function () { add('hl', '', curColor); } },
+        showFloat(rect.left + rect.width / 2, rect.top, rect.bottom, [
+          { label: '高亮', primary: true, fn: function () { add('hl', '', curColor); } },
           { label: '划线', fn: function () { add('ul', '', curColor); } },
           {
             label: '批注', fn: function () {
+              hideFloat();
               const body = U.el('div', {}, '<p class="hint" style="margin-bottom:8px">选中：' + esc(tx.slice(0, 80)) + '</p>');
               const ta = U.el('textarea', { class: 'input', style: 'width:100%;height:90px;resize:vertical' });
               body.appendChild(ta);
               U.modal({
                 title: '添加批注', body: body, onOpen: function () { ta.focus(); }, buttons: [
                   { label: '取消' },
-                  { label: '保存', cls: 'primary', onClick: function () { const v = ta.value.trim(); add('hl', v || '批注'); } }
+                  { label: '保存', cls: 'primary', onClick: function () { const v = ta.value.trim(); add('hl', v || '批注', curColor); } }
                 ]
               });
             }
           }
         ], function (c) { curColor = c; }, curColor);
+        floatSelection = { fieldEl: fieldEl, start: off[0], end: off[1] };
       }, 10);
     };
 
@@ -969,7 +1048,7 @@
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
       const el = t.target;
-      if (el.closest('.icon-btn,.btn,input,textarea,select,canvas,button')) return;
+      if (el.closest('.icon-btn,.btn,input,textarea,select,canvas,button,.related-preview')) return;
       if (!el.closest(TEXT_SEL)) return;
       clearTimeout(touchTimer);
       touchSelecting = false;
@@ -1007,7 +1086,7 @@
 
     root.addEventListener('click', function (e) {
       const mk = e.target.closest('mark[data-mid]');
-      if (!mk) return;
+      if (!mk || mk.closest('.related-preview')) return;
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed) return;
       const fieldEl = mk.closest('[data-field]');
@@ -1031,7 +1110,7 @@
           hideFloat();
         }
       });
-      showFloat(rect.left + rect.width / 2, rect.top, btns);
+      showFloat(rect.left + rect.width / 2, rect.top, rect.bottom, btns);
     });
   }
 
@@ -1057,6 +1136,9 @@
       refreshActs(card, card._item);
     },
     renderLinks: renderLinks,
+    linkedItems: linkedItems,
+    relatedTitle: relatedTitle,
+    previewHTML: function (item) { return questionHTML(item, true); },
     attach(root) {
       attachSelection(root);
       U.$$('.card', root).forEach(function (card) {

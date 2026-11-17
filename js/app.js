@@ -144,7 +144,7 @@
       const subj = exYc.dataset.exportYc;
       Bank.ensure(Bank.subjectNames()).then(function () {
         const qs = (Bank.yicuItems ? Bank.yicuItems(subj) : []);
-        ExportUI.runItems(Bank.itemsOf(qs), { title: '易错小结 · ' + subj });
+        ExportUI.chooseItems(Bank.itemsOf(qs), { title: '易错小结 · ' + subj });
       });
       return;
     }
@@ -154,7 +154,7 @@
       e.stopPropagation();
       const nm = exSubj.dataset.exportSubj;
       Bank.ensure([nm]).then(function () {
-        ExportUI.runItems(Bank.itemsOf(Bank.loaded[nm] || []), { title: nm, sort: 'chapter' });
+        ExportUI.chooseItems(Bank.itemsOf(Bank.loaded[nm] || []), { title: nm, sort: 'chapter' });
       });
       return;
     }

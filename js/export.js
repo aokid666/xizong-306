@@ -6,23 +6,41 @@
   var esc = function (s) { return U.esc(s); };
 
   /* ---------- 高亮与标注 ---------- */
-  function renderMarked(text, marks) {
+  var markColors = [
+    ['#ffe98a', '#d9a800'], ['#c8ecc0', '#4aa96c'], ['#cfe4fb', '#4b7bd4'],
+    ['#fcd9c0', '#e0762c'], ['#e8d6f7', '#a05fd0']
+  ];
+
+  function renderMarked(text, marks, notes, anchors) {
     text = text || '';
     var list = (marks || []).slice().sort(function (a, b) { return a.s - b.s; });
-    if (!list.length) return { html: esc(text), notes: [] };
-    var out = '', pos = 0, notes = [];
+    var out = '', pos = 0, i = 0;
+    anchors = anchors || [];
+    function segment(end) {
+      var html = '';
+      while (i < anchors.length && anchors[i].index < end) {
+        var anchor = anchors[i++];
+        if (anchor.index < pos) continue;
+        html += esc(text.slice(pos, anchor.index)) + '<span class="pg-hw-anchor">' + anchor.html;
+        while (i < anchors.length && anchors[i].index === anchor.index) html += anchors[i++].html;
+        pos = Math.min(end, anchor.index + (text.codePointAt(anchor.index) > 0xFFFF ? 2 : 1));
+        html += esc(text.slice(anchor.index, pos)) + '</span>';
+      }
+      html += esc(text.slice(pos, end));
+      pos = end;
+      return html;
+    }
     list.forEach(function (m) {
       if (m.s < pos) return;
-      out += esc(text.slice(pos, m.s));
-      var seg = text.slice(m.s, m.e);
+      out += segment(m.s);
       var cls = m.k === 'hl' ? 'hl' : 'ul';
+      var colors = markColors[(m.c || (m.k === 'hl' ? 1 : 3)) - 1] || markColors[0];
       var sup = '';
       if (m.n) { notes.push(m.n); sup = '<sup class="fn">' + notes.length + '</sup>'; }
-      out += '<span class="mk-' + cls + '">' + esc(seg) + '</span>' + sup;
-      pos = m.e;
+      out += '<span class="mk-' + cls + '" style="--mark-fill:' + colors[0] +
+        ';--mark-line:' + colors[1] + '">' + segment(m.e) + '</span>' + sup;
     });
-    out += esc(text.slice(pos));
-    return { html: out, notes: notes };
+    return out + segment(text.length);
   }
 
   function marksOf(qid, field, text) {
@@ -37,38 +55,55 @@
       }
       s0 = Math.max(0, Math.min(s0, text.length));
       e0 = Math.max(s0, Math.min(e0, text.length));
-      return { i: m.i, s: s0, e: e0, k: m.k, n: m.n, tx: tx };
+      return { i: m.i, s: s0, e: e0, k: m.k, n: m.n, c: m.c };
     }).filter(function (m) { return m.e > m.s; });
   }
 
-  /* ---------- 手写：转成 SVG（矢量，打印清晰） ---------- */
-  function hwSvg(qid, w) {
-    var d = Store.hw(qid);
-    if (!d || !d.s || !d.s.length) return '';
-    var bw = d.w || 800, bh = d.h || 400;
-    var scale = w / bw;
-    var parts = d.s.map(function (st) {
-      var p = st.p || [], pts = [];
-      for (var i = 0; i + 1 < p.length; i += 2) pts.push((p[i] * scale) + ',' + (p[i + 1] * scale));
-      return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#222" stroke-width="' +
-        Math.max(1, (st.w || 3) * scale) + '" stroke-linecap="round" stroke-linejoin="round"/>';
-    }).join('');
-    return '<div class="pg-hw"><div class="pg-lab">手写批注</div>' +
-      '<svg viewBox="0 0 ' + w + ' ' + (bh * scale) + '" width="' + w + '">' + parts + '</svg></div>';
+  /* ---------- 手写：优先跟随正文字符，兼容按小问定位的旧笔迹 ---------- */
+  function hwStroke(data, st, x0, y0, scale) {
+    var p = st.p || st, pts = [];
+    for (var i = 0; i + 1 < p.length; i += 2) {
+      pts.push((p[i] - x0) * scale + ',' + (p[i + 1] - y0) * scale);
+    }
+    if (!pts.length) return '';
+    if (pts.length === 1) pts.push(pts[0]);
+    return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' +
+      esc(st.c || data.c || '#191919') + '" stroke-width="' + ((st.w || data.lw || 3) * scale) +
+      '" stroke-linecap="round" stroke-linejoin="round"/>';
   }
 
-  /* 手写覆盖层：和答题界面一样压在题目上 */
-  function hwOverlay(qid) {
-    var d = Store.hw(qid);
-    if (!d || !d.s || !d.s.length) return '';
-    var w = d.w || 800, hh = d.h || 400;
-    var parts = d.s.map(function (st) {
-      var p = st.p || [], pts = [];
-      for (var i = 0; i + 1 < p.length; i += 2) pts.push(p[i] + ',' + p[i + 1]);
-      return '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#1a1a1a" stroke-width="' +
-        (st.w || 3) + '" stroke-linecap="round" stroke-linejoin="round"/>';
-    }).join('');
-    return '<svg class="pg-hwover" viewBox="0 0 ' + w + ' ' + hh + '" preserveAspectRatio="xMinYMin meet">' + parts + '</svg>';
+  function hwForPage(item, enabled) {
+    var fields = new Map(), blocks = new Map();
+    if (!enabled) return { fields: fields, blocks: blocks };
+    item.qs.forEach(function (q, i) {
+      var data = Store.hw(q.id);
+      if (!data || !data.s) return;
+      data.s.forEach(function (st) {
+        var p = st.p || st;
+        if (!p || p.length < 2) return;
+        var at = st.textAnchor;
+        if (at && at.font > 0 && at.scale > 0 && Number.isInteger(at.index)) {
+          var key = at.qid + '|' + at.field;
+          if (!fields.has(key)) fields.set(key, []);
+          fields.get(key).push({
+            index: at.index,
+            html: '<svg aria-hidden="true" viewBox="0 0 ' + at.font + ' ' + at.font + '">' +
+              hwStroke(data, st, p[0] - at.dx / at.scale, p[1] - at.dy / at.scale, at.scale) + '</svg>'
+          });
+          return;
+        }
+        var idx = st.a >= 0 ? i + st.a : (i || -1);
+        var y0 = 0;
+        if (st.a >= 0 && st.ay != null && item.qs[idx]) y0 = p[1] - st.ay;
+        var block = item.qs[idx] ? item.qs[idx].id : '';
+        var w = data.w || 800, h = data.h || 400;
+        var svg = '<svg aria-hidden="true" class="pg-hwover" viewBox="0 0 ' + w + ' ' + h + '">' +
+          hwStroke(data, st, 0, y0, 1) + '</svg>';
+        blocks.set(block, (blocks.get(block) || '') + svg);
+      });
+    });
+    fields.forEach(function (list) { list.sort(function (a, b) { return a.index - b.index; }); });
+    return { fields: fields, blocks: blocks };
   }
 
   /* ---------- 笔记 ---------- */
@@ -169,47 +204,50 @@
     if (fav) h += '<div class="pg-star ' + (odd ? 'r' : 'l') + '">' + starSvg() + '</div>';
     h += '<div class="pg-hd">' + esc(head) + '</div>';
     h += '<div class="pg-body">';
-    var fnotes0 = [];
+    var fnotes = [];
+    var ink = hwForPage(item, opts.hw);
+    function field(text, qid, key) {
+      return renderMarked(text, opts.mark ? marksOf(qid, key, text) : [], fnotes, ink.fields.get(qid + '|' + key));
+    }
+    function option(o, qid, prefix) {
+      return '<div><span class="k">' + esc(o.k) + '．</span>' + field(o.v, qid, prefix + o.k) + '</div>';
+    }
+    if (item.bGroup) {
+      h += '<div class="pg-opts">' + (item.bShared || []).map(function (o) { return option(o, q0.id, 'sopt'); }).join('') + '</div>';
+    }
     if (item.vignette) {
-      var rv = renderMarked(item.vignette, opts.mark ? marksOf(q0.id, 'case', item.vignette) : []);
-      (rv.notes || []).forEach(function (n) { fnotes0.push(n); });
-      h += '<div class="pg-vig">' + (typeof rv === 'string' ? esc(item.vignette) : rv.html) + '</div>';
+      h += '<div class="pg-vig">' + field(item.vignette, q0.id, 'case') + '</div>';
     }
 
-    var fnotes = fnotes0;
     item.qs.forEach(function (q, i) {
       var tail = (item.vignette && item.tails && item.tails[i] != null) ? item.tails[i] : q.stem;
-      var r = renderMarked(tail, opts.mark ? marksOf(q.id, 'stem', tail) : []);
-      var html = r.html; fnotes = fnotes.concat(r.notes || []);
-      h += '<div class="pg-q">' + (item.qs.length > 1 ? '<b>' + (i + 1) + '．</b>' : '') + html + '</div>';
+      if (item.vignette && tail && tail.indexOf(item.vignette) === 0) {
+        tail = tail.slice(item.vignette.length).replace(/^[\s，。、；：,.;:]+/, '');
+      }
+      h += '<div class="pg-subq"><div class="pg-q">' +
+        (item.qs.length > 1 ? '<b>' + (i + 1) + '．</b>' : '') + field(tail, q.id, 'stem') + '</div>';
       h += '<div class="pg-opts">' + (q.opts || []).map(function (o) {
-        var rr = renderMarked(o.v, opts.mark ? marksOf(q.id, 'opt' + o.k, o.v) : []);
-        (rr.notes || []).forEach(function (n) { fnotes.push(n); });
-        return '<div><span class="k">' + esc(o.k) + '．</span>' +
-          (typeof rr === 'string' ? esc(o.v) : rr.html) + '</div>';
+        return item.bGroup ? '<span>' + esc(o.k) + ' </span>' : option(o, q.id, 'opt');
       }).join('') + '</div>';
       if (opts.withAnswer) {
         h += '<div class="pg-ans">答案：' + esc(Bank.truth(q) || '（无）') + '</div>';
-        if (q.exp) {
-          var re = renderMarked(q.exp, opts.mark ? marksOf(q.id, 'exp', q.exp) : []);
-          (re.notes || []).forEach(function (n) { fnotes.push(n); });
-          h += '<div class="pg-exp">解析：' + (typeof re === 'string' ? esc(q.exp) : re.html) + '</div>';
-        }
       }
+      if (opts.withExplanation && q.exp) h += '<div class="pg-exp">解析：' + field(q.exp, q.id, 'exp') + '</div>';
       if (opts.note) h += noteHTML(q.id, imgs);
+      h += (ink.blocks.get(q.id) || '') + '</div>';
     });
-    if (opts.hw) h += hwOverlay(q0.id);
+    h += ink.blocks.get('') || '';
     h += '</div>';
     if (opts.map) h += mapHTML(q0);
-    (function () {
-      var seen = {};
-      fnotes.forEach(function (n) { seen[n] = 1; });
+    if (opts.mark) {
+      var seen = new Set(fnotes);
       item.qs.forEach(function (q) {
         Store.marks(q.id).forEach(function (m) {
-          if (m.n && !seen[m.n]) { seen[m.n] = 1; fnotes.push(m.n); }
+          if (m.f === 'exp' && !opts.withExplanation) return;
+          if (m.n && !seen.has(m.n)) { seen.add(m.n); fnotes.push(m.n); }
         });
       });
-    })();
+    }
 
     if (fnotes.length) {
       h += '<div class="pg-fn"><div class="pg-lab">标注</div>' + fnotes.map(function (n, i) {
@@ -288,31 +326,45 @@
     return out;
   }
 
+  function chooseItems(items, opts) {
+    if (!items || !items.length) { U.toast('这里没有题目'); return; }
+    opts = opts || {};
+    var box = U.el('div');
+    box.innerHTML = '<p class="hint" style="margin-bottom:10px">导出 ' + items.length + ' 组题' +
+      (opts.title ? '（' + esc(opts.title) + '）' : '') + '</p>' +
+      '<label class="chk"><input type="checkbox" data-ex="mark" checked> 高亮与标注</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="note" checked> 笔记（文字+图片）</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="hw" checked> 手写</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="map" checked> 关联导图</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="withAnswer"> 答案</label>' +
+      '<label class="chk"><input type="checkbox" data-ex="withExplanation"> 解析</label>';
+    U.modal({
+      title: '导出 PDF', body: box, buttons: [
+        { label: '取消' },
+        { label: '开始导出', cls: 'primary', onClick: function () {
+          var choices = {};
+          box.querySelectorAll('[data-ex]').forEach(function (input) { choices[input.dataset.ex] = input.checked; });
+          U.closeModal();
+          runWith(items, Object.assign({}, opts, choices));
+        } }
+      ]
+    });
+  }
+
   function runWith(items, opts) {
     opts = opts || {};
     if (!items || !items.length) { U.toast('这里没有题目'); return; }
     var box = document.getElementById('print-root');
-    var prep = (opts.map !== false && Bank.ensureMaps) ? Bank.ensureMaps().catch(function () { }) : Promise.resolve();
-    prep.then(function () { return loadImages(items); }).catch(function () { return {}; }).then(function (imgs) {
-      var full = {
-        mark: opts.mark !== false, note: opts.note !== false,
-        hw: opts.hw !== false, map: opts.map !== false,
-        withAnswer: !!opts.withAnswer, sort: opts.sort || 'bank'
-      };
+    var full = Object.assign({ mark: true, note: true, hw: true, map: true, sort: 'bank' }, opts);
+    prepAll(items, full).then(function (imgs) {
       var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
       var mkCount = 0;
       arr.forEach(function (it) { it.qs.forEach(function (q) { mkCount += Store.marks(q.id).length; }); });
       if (opts.mark !== false && mkCount === 0) U.toast('提示：这批题里没有高亮/标注记录', 3000);
       box.innerHTML = buildPages(arr, full, imgs).join('');
-      document.body.classList.add('printing');
-      var back = function () { document.body.classList.remove('printing'); window.removeEventListener('afterprint', back); };
-      window.addEventListener('afterprint', back);
+      beginPrint(full.title);
       U.toast('共 ' + arr.length + ' 组，正在准备打印…', 2000);
-      var list = Array.prototype.slice.call(box.querySelectorAll('img'));
-      Promise.all(list.map(function (x) {
-        if (x.complete && x.naturalWidth) return Promise.resolve();
-        return new Promise(function (res) { x.onload = x.onerror = function () { res(); }; });
-      })).then(function () {
+      waitForImages(box).then(function () {
         setTimeout(function () { document.getElementById('toast').hidden = true; window.print(); }, 300);
       });
     });
@@ -323,27 +375,44 @@
     return pr.then(function () { return opts.note === false ? {} : loadImages(items); }).catch(function () { return {}; });
   }
 
+  function waitForImages(box) {
+    return Promise.all(Array.from(box.querySelectorAll('img'), function (img) {
+      if (img.complete) return Promise.resolve();
+      return new Promise(function (resolve) {
+        img.addEventListener('load', ready);
+        img.addEventListener('error', ready);
+        if (img.complete) ready();
+        function ready() {
+          img.removeEventListener('load', ready);
+          img.removeEventListener('error', ready);
+          resolve();
+        }
+      });
+    }));
+  }
+
+  function beginPrint(title, done) {
+    var oldTitle = document.title;
+    if (title) document.title = title;
+    document.body.classList.add('printing');
+    window.addEventListener('afterprint', function () {
+      document.body.classList.remove('printing');
+      if (title) document.title = oldTitle;
+      if (done) done();
+    }, { once: true });
+  }
+
   function printGroup(items, opts) {
     return new Promise(function (resolve) {
       var box = document.getElementById('print-root');
       prepAll(items, opts).then(function (imgs) {
         var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
-      var mkCount = 0;
-      arr.forEach(function (it) { it.qs.forEach(function (q) { mkCount += Store.marks(q.id).length; }); });
-      if (opts.mark !== false && mkCount === 0) U.toast('提示：这批题里没有高亮/标注记录', 3000);
+        var mkCount = 0;
+        arr.forEach(function (it) { it.qs.forEach(function (q) { mkCount += Store.marks(q.id).length; }); });
+        if (opts.mark !== false && mkCount === 0) U.toast('提示：这批题里没有高亮/标注记录', 3000);
         box.innerHTML = buildPages(arr, opts, imgs).join('');
-        document.body.classList.add('printing');
-        var list = Array.prototype.slice.call(box.querySelectorAll('img'));
-        Promise.all(list.map(function (x) {
-          if (x.complete && x.naturalWidth) return Promise.resolve();
-          return new Promise(function (res) { x.onload = x.onerror = function () { res(); }; });
-        })).then(function () {
-          var done = function () {
-            window.removeEventListener('afterprint', done);
-            document.body.classList.remove('printing');
-            resolve();
-          };
-          window.addEventListener('afterprint', done);
+        beginPrint(opts.title, resolve);
+        waitForImages(box).then(function () {
           U.toast('共 ' + arr.length + ' 组：请选择「另存为 PDF」', 4000);
           setTimeout(function () { try { document.getElementById('toast').hidden = true; } catch (e) { } window.print(); }, 400);
         });
@@ -363,6 +432,7 @@
       next();
     },
     runItems: runWith,
+    chooseItems: chooseItems,
     collect: collect,
     sortItems: sortItems,
     buildPages: buildPages,
@@ -372,23 +442,11 @@
       items = sortItems(items, opts.sort);
       if (opts.limit) items = items.slice(0, opts.limit);
       var box = document.getElementById('print-root');
-      var waitImgs = function (im) {
-        var list = Array.prototype.slice.call(im.querySelectorAll('img'));
-        return Promise.all(list.map(function (x) {
-          if (x.complete && x.naturalWidth) return Promise.resolve();
-          return new Promise(function (res) { x.onload = x.onerror = function () { res(); }; });
-        }));
-      };
       var go = function (imgs) {
         box.innerHTML = buildPages(items, opts, imgs).join('');
-        document.body.classList.add('printing');
-        var back = function () {
-          document.body.classList.remove('printing');
-          window.removeEventListener('afterprint', back);
-        };
-        window.addEventListener('afterprint', back);
+        beginPrint(opts.title);
         U.toast('共 ' + items.length + ' 题，正在准备打印…', 2000);
-        Promise.all([waitImgs(box), new Promise(function (r) { setTimeout(r, 300); })])
+        Promise.all([waitForImages(box), new Promise(function (r) { setTimeout(r, 300); })])
           .then(function () { document.getElementById('toast').hidden = true; window.print(); });
       };
       var prep = (opts.map && Bank.ensureMaps) ? Bank.ensureMaps().catch(function () { }) : Promise.resolve();

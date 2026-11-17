@@ -145,14 +145,31 @@
       return this.caseItem(qs, 'c:' + q.clus, q.clus);
     },
 
+    relatedItem(q) {
+      const cases = window.XZ && window.XZ.cases;
+      if (cases && !q.mock) {
+        for (const topic of cases.topics) {
+          const group = topic.groups.find(function (g) { return g.q.length > 1 && g.q.includes(q.id); });
+          if (!group) continue;
+          const qs = group.q.map((id) => this.q(id));
+          if (qs.every(Boolean)) {
+            const native = this.itemOf(q);
+            if (native.qs.length === qs.length && native.qs.every(function (member, i) { return member.id === qs[i].id; })) return native;
+            return this.caseItem(qs, 'cg:' + qs[0].id, '', false);
+          }
+        }
+      }
+      return this.itemOf(q);
+    },
+
     /* 用一组题（共用题干）构造 item */
-    caseItem(qs, key, cid) {
+    caseItem(qs, key, cid, cache) {
       const item = { key: key, qs: qs, vignette: '', tails: [], cid: cid || '' };
       const fx = window.XZ && window.XZ.casefix;
       if (fx && cid && fx.v[cid]) {
         item.vignette = fx.v[cid];
         item.tails = qs.map(function (q) { return fx.t[q.id] || q.stem; });
-        qs.forEach(function (x) { x._item = item; });
+        if (cache !== false) qs.forEach(function (x) { x._item = item; });
         return item;
       }
       // 最长公共前缀 -> 题干正文
@@ -183,7 +200,7 @@
           return x.stem.slice(vignette.length).replace(/^[\s，。、；：,.;:]+/, '');
         });
       }
-      qs.forEach(function (x) { x._item = item; });
+      if (cache !== false) qs.forEach(function (x) { x._item = item; });
       return item;
     },
 
@@ -407,7 +424,8 @@
       if (window.XZ && window.XZ.cases) return Promise.resolve(window.XZ.cases);
       if (this._caseP) return this._caseP;
       this._caseP = this._loadScript(BASE + 'data/cases.js?v=20261103e')
-        .then(function () { return window.XZ.cases || { topics: [] }; });
+        .then(function () { return window.XZ.cases || { topics: [] }; })
+        .catch((err) => { delete this._caseP; throw err; });
       return this._caseP;
     },
     caseTopics() {

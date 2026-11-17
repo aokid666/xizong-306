@@ -13,6 +13,7 @@
   window.Session = {
     S: S, start: start, resume: resume,
     teardown: function () {
+      closeRelated();
       S.items = []; S.sel = {}; S.res = {};
       const p = document.querySelector('.pager'); if (p) p.remove();
       document.body.classList.remove('has-pager');
@@ -20,6 +21,7 @@
   };
 
   let bar = null, content = null, pager = null;
+  let related = null, relatedRequest = 0;
 
   function sortLetters(s) { return String(s || '').split('').sort().join(''); }
 
@@ -106,6 +108,7 @@
 
   /* ---------------- 挂载 ---------------- */
   function mount() {
+    closeRelated();
     const old = document.querySelector('.pager');
     if (old) old.remove();
     const app = U.resetApp('wrap session');
@@ -290,9 +293,8 @@
       }
 
       const linkChip = t.closest('[data-linkto]');
-      if (linkChip) {
-        const cardEl = linkChip.closest('.card');
-        showQuestionModal(linkChip.dataset.linkto, cardEl ? cardEl._item : null);
+      if (linkChip && content.contains(linkChip)) {
+        showRelated(linkChip.dataset.linkto, linkChip.closest('.card'), linkChip);
         return;
       }
 
@@ -348,6 +350,11 @@
 
     document.addEventListener('keydown', function (e) {
       if (!S.items.length) return;
+      if (e.key === 'Escape' && related && related.panel.contains(e.target)) {
+        closeRelated(true);
+        return;
+      }
+      if (e.target.closest('.related-preview')) return;
       if (e.target.matches('input,textarea,select')) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown' && S.mode === 'paged') {
         if (S.mode === 'paged') { e.preventDefault(); go(S.idx + 1); }
@@ -539,26 +546,7 @@
   }
 
   function exportDialog() {
-    const box = U.el('div');
-    box.innerHTML = '<p class="hint" style="margin-bottom:10px">导出当前 ' + S.items.length + ' 组题（' + (S.title || '') + '）</p>' +
-      '<label class="chk"><input type="checkbox" data-ex="mark" checked> 高亮与标注</label>' +
-      '<label class="chk"><input type="checkbox" data-ex="note" checked> 笔记（文字+图片）</label>' +
-      '<label class="chk"><input type="checkbox" data-ex="hw" checked> 手写</label>' +
-      '<label class="chk"><input type="checkbox" data-ex="map" checked> 关联导图</label>' +
-      '<label class="chk"><input type="checkbox" data-ex="ans"> 附答案与解析</label>';
-    U.modal({
-      title: '导出 PDF', body: box, buttons: [
-        { label: '取消' },
-        { label: '开始导出', cls: 'primary', onClick: function () {
-            const g = function (k) { return !!box.querySelector('[data-ex="' + k + '"]').checked; };
-            U.closeModal();
-            ExportUI.runItems(S.items.slice(), {
-              title: S.title || '', mark: g('mark'), note: g('note'),
-              hw: g('hw'), map: g('map'), withAnswer: g('ans'), sort: 'seq'
-            });
-          } }
-      ]
-    });
+    ExportUI.chooseItems(S.items.slice(), { title: S.title, sort: 'seq' });
   }
 
   function mapDialog(item) {
@@ -634,88 +622,151 @@
 
   function linkDialog(item) {
     const q0 = item.qs[0];
+    const own = new Set(item.qs.map(function (q) { return q.id; }));
     const body = U.el('div');
-    body.innerHTML = '<input class="input" data-lk placeholder="搜题干 / 年份 / 知识点，找到相似的题" style="width:100%">' +
-      '<div class="hint" style="margin:8px 0">已关联：<span data-lk-count>' + Store.linksOf(q0.id).length + '</span> 题（双向）</div>' +
-      '<div data-lk-body class="lk-body"></div>';
-    U.modal({ title: '关联相似题（对照模式）', body: body, buttons: [{ label: '关闭' }] });
+    body.innerHTML = '<input class="input" data-lk placeholder="搜题干 / 年份 / 知识点" style="width:100%" disabled>' +
+      '<div class="hint" style="margin:8px 0">已关联 <span data-lk-count>' + Card.linkedItems(item).size + '</span> 组题</div>' +
+      '<div data-lk-body class="lk-body"><div class="hint">正在载入题库…</div></div>';
+    U.modal({ title: '关联相似题', body: body, buttons: [{ label: '关闭' }] });
 
     const inp = body.querySelector('[data-lk]');
     const box = body.querySelector('[data-lk-body]');
     const cnt = body.querySelector('[data-lk-count]');
 
-    function refreshCount() {
-      cnt.textContent = Store.linksOf(q0.id).length;
-      const card = U.$('.card[data-key="' + cssKey(item.key) + '"]', content);
-      if (card) Card.renderLinks(card, q0);
-    }
-
-    function render(rows) {
-      if (!rows.length) { box.innerHTML = '<div class="empty">没有结果</div>'; return; }
-      box.innerHTML = rows.map(function (q) {
-        const linked = Store.linksOf(q0.id).indexOf(q.id) >= 0;
-        const lab = q.mock ? ('模拟 · ' + (q.set || '') + ' 第' + q.n + '题') : q.label;
+    function render() {
+      const linked = Card.linkedItems(item);
+      cnt.textContent = linked.size;
+      const term = inp.value.trim();
+      const groups = new Map();
+      if (term) {
+        Bank.search(term, { scope: 'all', fields: ['stem', 'meta'], limit: 20 }).forEach(function (q) {
+          const group = Bank.relatedItem(q);
+          if (!group.qs.some(function (member) { return own.has(member.id); }) && !groups.has(group.key)) {
+            groups.set(group.key, group);
+          }
+        });
+      } else {
+        linked.forEach(function (link, key) {
+          if (link.item) groups.set(key, link.item);
+        });
+      }
+      if (!groups.size) {
+        box.innerHTML = '<div class="hint">' + (term ? '没有结果' : '输入关键词开始搜索') + '</div>';
+        return;
+      }
+      box.innerHTML = Array.from(groups.values()).map(function (group) {
+        const q = group.qs[0];
+        const isLinked = linked.has(group.key);
+        const stem = group.vignette || q.stem;
         return '<div class="lk-row"><div class="grow">' +
-          '<div class="lk-t">' + esc(q.stem.slice(0, 70)) + (q.stem.length > 70 ? '…' : '') + '</div>' +
-          '<div class="hint">' + esc(lab) + ' · ' + esc(q.subj) + '</div></div>' +
-          '<button class="btn sm ' + (linked ? 'on' : '') + '" data-lkt="' + esc(q.id) + '">' +
-          (linked ? '已关联' : '关联') + '</button></div>';
+          '<div class="lk-t">' + esc(stem.slice(0, 70)) + (stem.length > 70 ? '…' : '') + '</div>' +
+          '<div class="hint">' + esc(Card.relatedTitle(group)) + ' · ' + esc(q.subj) + '</div></div>' +
+          '<button class="btn sm' + (isLinked ? ' on' : '') + '" data-lkt="' + esc(q.id) + '">' +
+          (isLinked ? '取消关联' : '关联') + '</button></div>';
       }).join('');
     }
 
-    const doSearch = U.debounce(function () {
-      const term = inp.value.trim();
-      if (!term) { box.innerHTML = '<div class="hint">输入关键词开始搜索</div>'; return; }
-      const rows = Bank.search(term, { scope: 'all', fields: ['stem', 'meta'], limit: 20 })
-        .filter(function (q) { return q.id !== q0.id; });
-      render(rows);
-    }, 220);
-
-    let timer = null;
-    inp.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(doSearch, 220); });
+    inp.addEventListener('input', U.debounce(render, 220));
     box.addEventListener('click', function (e) {
       const b = e.target.closest('[data-lkt]');
       if (!b) return;
-      const on = Store.toggleLink(q0.id, b.dataset.lkt);
-      b.classList.toggle('on', on);
-      b.textContent = on ? '已关联' : '关联';
-      refreshCount();
-      U.toast(on ? '已关联（双向）' : '已取消关联');
+      const group = Bank.relatedItem(Bank.q(b.dataset.lkt));
+      const link = Card.linkedItems(item).get(group.key);
+      if (link) {
+        removeRelated(item, group);
+      } else {
+        Store.toggleLink(q0.id, group.qs[0].id);
+        refreshLinkRows();
+        U.toast('已关联（双向）');
+      }
+      render();
     });
 
-    Bank.ensure(Bank.subjectNames()).then(function () { return Bank.ensureMock(); }).then(function () {
-      inp.focus();
-      box.innerHTML = '<div class="hint">输入关键词开始搜索</div>';
+    Promise.all([Bank.ensureAll(), Bank.ensureMock(), Bank.ensureCases()]).then(function () {
+      refreshLinkRows();
+      inp.disabled = false;
+      if (body.isConnected && !body.closest('[hidden]')) inp.focus();
+      render();
+    }).catch(function () {
+      box.innerHTML = '<div class="hint">题库载入失败，请关闭后重试</div>';
     });
   }
 
-  function showQuestionModal(qid, fromItem) {
+  function refreshLinkRows() {
+    U.$$('.card', content).forEach(Card.renderLinks);
+  }
+
+  function removeRelated(source, group) {
+    const link = Card.linkedItems(source).get(group.key);
+    if (!link) return;
+    link.pairs.forEach(function (pair) { Store.toggleLink(pair[0], pair[1]); });
+    if (related && !Card.linkedItems(related.card._item).has(related.group.key)) closeRelated();
+    refreshLinkRows();
+    U.toast('已取消关联');
+  }
+
+  function closeRelated(restoreFocus) {
+    relatedRequest++;
+    if (!related) return;
+    content.parentElement.classList.remove('related-split');
+    related.panel.remove();
+    if (restoreFocus) {
+      const chip = related.card.querySelector('[data-linkto="' + cssKey(related.id) + '"]');
+      if (chip) chip.focus({ preventScroll: true });
+    }
+    related = null;
+  }
+
+  async function showRelated(qid, card, launcher) {
+    if (related && related.card === card && related.id === qid) {
+      closeRelated(true);
+      return;
+    }
+    closeRelated();
+    const request = relatedRequest;
+    launcher.setAttribute('aria-busy', 'true');
+    try {
+      await Promise.all([
+        Bank.ensureCases(),
+        /^M\d+$/.test(qid) ? Bank.ensureMock() : Bank.ensureAll()
+      ]);
+    } catch (err) {
+      if (request === relatedRequest) U.toast('关联题载入失败，请重试');
+      return;
+    } finally {
+      launcher.removeAttribute('aria-busy');
+    }
+    if (request !== relatedRequest || !card.isConnected) return;
     const q = Bank.q(qid);
-    if (!q) return;
-    const fromCard = fromItem ? U.$('.card[data-key="' + cssKey(fromItem.key) + '"]', content) : null;
-    const truth = Bank.truth(q);
-    const body = U.el('div');
-    body.innerHTML = '<div style="font-family:var(--serif);line-height:1.8;font-size:14.5px;margin-bottom:10px">' + esc(q.stem) + '</div>' +
-      '<ul class="opts">' + q.opts.map(function (o) {
-        const ok = truth.indexOf(o.k) >= 0;
-        return '<li class="opt' + (ok ? ' correct' : '') + '"><span class="k">' + o.k + '.</span>' +
-          '<span class="t">' + esc(o.v) + '</span></li>';
-      }).join('') + '</ul>' +
-      (q.exp ? '<div class="exp" style="margin-top:10px"><div class="body">' + esc(q.exp) + '</div></div>' : '');
-    U.modal({
-      title: (q.mock ? '模拟题' : q.label) + ' · ' + q.subj, body: body,
-      buttons: [
-        {
-          label: '取消关联', onClick: function () {
-            if (!fromItem) return;
-            Store.toggleLink(fromItem.qs[0].id, qid);
-            if (fromCard) Card.renderLinks(fromCard, fromItem.qs[0]);
-            U.toast('已取消关联');
-          }
-        },
-        { label: '关闭', cls: 'primary' }
-      ]
+    if (!q) { U.toast('找不到这道关联题'); return; }
+    const group = Bank.relatedItem(q);
+    refreshLinkRows();
+    const panel = U.el('section', { class: 'related-preview', 'aria-label': '关联题' });
+    const layoutLabels = '<span class="related-desktop-label">分屏查看</span><span class="related-mobile-label">跳到关联题</span>';
+    panel.innerHTML = '<div class="related-preview-head"><h3>' + esc(Card.relatedTitle(group)) + '</h3>' +
+      '<button class="btn sm" data-related-layout>' + layoutLabels + '</button>' +
+      '<button class="btn ghost sm" data-related-unlink>取消关联</button>' +
+      '<button class="btn ghost sm" data-related-close>关闭</button></div>' +
+      '<div class="related-preview-body">' + Card.previewHTML(group) + '</div>';
+    related = { id: qid, group: group, panel: panel, card: card };
+    card.after(panel);
+    panel.addEventListener('click', function (e) {
+      const layout = e.target.closest('[data-related-layout]');
+      if (layout) {
+        const app = content.parentElement;
+        const split = app.classList.toggle('related-split');
+        if (split) app.appendChild(panel);
+        else card.after(panel);
+        layout.innerHTML = split ? '题下查看' : layoutLabels;
+        layout.focus({ preventScroll: true });
+        if (!split || window.matchMedia('(max-width: 720px)').matches) panel.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+      if (e.target.closest('[data-related-unlink]')) removeRelated(card._item, group);
+      if (e.target.closest('[data-related-close]')) closeRelated(true);
     });
+    panel.querySelector('[data-related-layout]').focus({ preventScroll: true });
+    panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   window.__keyDialog = keyDialog;
@@ -758,6 +809,7 @@
       return;
     }
     if (i < 0 || i >= S.items.length) return;
+    closeRelated();
     S.idx = i;
     content.innerHTML = '';
     const card = makeCard(S.items[i], i);

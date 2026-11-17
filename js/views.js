@@ -151,7 +151,7 @@
             (Bank.loaded[n] || []).forEach(function (q) { if (q.y === yy) qs.push(q); });
           });
           const its = Bank.itemsOf(qs);
-          ExportUI.runItems(its, { title: yy + ' 年真题' });
+          ExportUI.chooseItems(its, { title: yy + ' 年真题' });
         });
         return;
       }
@@ -421,7 +421,7 @@
         const ch0 = s0.chapters[ci0];
         const qs0 = qsOf ? qsOf(ci0) : [];
         if (!qs0.length) { U.toast('这一章在所选年份范围内没有题'); return; }
-        ExportUI.runItems(Bank.itemsOf(qs0), { title: name + ' · 第' + ch0.z + '章 ' + ch0.t });
+        ExportUI.chooseItems(Bank.itemsOf(qs0), { title: name + ' · 第' + ch0.z + '章 ' + ch0.t });
         return;
       }
       const chBtn = e.target.closest('[data-ch]');
@@ -883,7 +883,7 @@
       if (exl) {
         const its = box._items || [];
         if (!its.length) return;
-        ExportUI.runItems(its, { sort: 'bank' });
+        ExportUI.chooseItems(its, { sort: 'bank' });
         return;
       }
       const rdo = ev.target.closest('[data-redo-list]');
@@ -1011,7 +1011,7 @@
           const set = exs.dataset.exportSet;
           const idx = Bank.mock.sets.map(function (x, i) { return x.t === set ? i : -1; }).filter(function (i) { return i >= 0; })[0];
           const its = Bank.mockItemsBySet(idx);
-          ExportUI.runItems(its, { title: set, sort: 'seq' });
+          ExportUI.chooseItems(its, { title: set, sort: 'seq' });
         });
         return;
       }
@@ -1069,7 +1069,8 @@
       '<div class="seg" data-exp="sort"><button data-v="bank" class="on">按题库</button><button data-v="year">按年份</button><button data-v="chapter">按章节</button><button data-v="subject">按科目</button></div>' +
       '<span class="hint" style="margin-left:8px">按题库＝先真题（年份倒序）后模拟题</span></div></div>';
     html += '<div class="field"><div class="k">答案解析</div><div class="v">' +
-      '<label class="chk"><input type="checkbox" data-exp-ans> 附带答案与解析</label></div></div>';
+      '<label class="chk"><input type="checkbox" data-exp-ans> 答案</label>' +
+      '<label class="chk"><input type="checkbox" data-exp-exp> 解析</label></div></div>';
     html += '<div class="field"><div class="k">批注</div><div class="v">' +
       '<label class="chk"><input type="checkbox" data-exp-anno checked> 高亮与标注</label>' +
       '<label class="chk"><input type="checkbox" data-exp-note checked> 笔记（文字+图片）</label>' +
@@ -1164,6 +1165,7 @@
             hw: !!app().querySelector('[data-exp-hw]').checked,
             map: !!app().querySelector('[data-exp-map]').checked,
             withAnswer: !!app().querySelector('[data-exp-ans]').checked,
+            withExplanation: !!app().querySelector('[data-exp-exp]').checked,
 
             limit: parseInt((app().querySelector('[data-exp-limit]') || {}).value, 10) || 0
           });
@@ -1310,7 +1312,7 @@
           loadThen(Bank.subjectNames(), function () {
             const its = Bank.caseItems(ex.dataset.exportTopic);
             if (!its.length) { U.toast('没有题目'); return; }
-            ExportUI.runItems(its, { title: ex.dataset.exportTopic });
+            ExportUI.chooseItems(its, { title: '病例题 · ' + ex.dataset.exportTopic, sort: 'seq' });
           });
           return;
         }
