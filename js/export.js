@@ -461,7 +461,7 @@
       beginPrint(full.title);
       U.toast('共 ' + arr.length + ' 组，正在准备打印…', 2000);
       waitForImages(box).then(function () {
-        setTimeout(function () { document.getElementById('toast').hidden = true; window.print(); }, 300);
+        setTimeout(function () { printPages(box); }, 300);
       });
     });
   }
@@ -487,6 +487,39 @@
     }));
   }
 
+  function fitPrintInk(box) {
+    var fits = [];
+    box.querySelectorAll('.pg').forEach(function (page) {
+      var strokes = page.querySelectorAll('.pg-hwover polyline, .pg-hw-anchor polyline');
+      if (!strokes.length) return;
+      var paper = page.getBoundingClientRect();
+      var left = 0, right = paper.width;
+      var inset = 2;
+      strokes.forEach(function (stroke) {
+        var rect = stroke.getBoundingClientRect();
+        var matrix = stroke.getScreenCTM();
+        var radius = matrix ? Number(stroke.getAttribute('stroke-width')) * Math.hypot(matrix.a, matrix.c) / 2 : 0;
+        left = Math.min(left, rect.left - paper.left - radius - inset);
+        right = Math.max(right, rect.right - paper.left + radius + inset);
+      });
+      if (left < 0 || right > paper.width) {
+        fits.push({ page: page, offset: -left, zoom: paper.width / (right - left) });
+      }
+    });
+    // Scale the complete layout so the circle, arrow and writing keep their
+    // relative positions. A fixed pre-scale A4 width prevents another reflow.
+    fits.forEach(function (fit) {
+      fit.page.style.marginLeft = fit.offset + 'px';
+      fit.page.style.zoom = String(fit.zoom);
+    });
+  }
+
+  function printPages(box) {
+    fitPrintInk(box);
+    document.getElementById('toast').hidden = true;
+    window.print();
+  }
+
   function beginPrint(title, done) {
     var oldTitle = document.title;
     if (title) document.title = title;
@@ -510,7 +543,7 @@
         beginPrint(opts.title, resolve);
         waitForImages(box).then(function () {
           U.toast('共 ' + arr.length + ' 组：请选择「另存为 PDF」', 4000);
-          setTimeout(function () { try { document.getElementById('toast').hidden = true; } catch (e) { } window.print(); }, 400);
+          setTimeout(function () { printPages(box); }, 400);
         });
       }).catch(function () { resolve(); });
     });
@@ -543,7 +576,7 @@
         beginPrint(opts.title);
         U.toast('共 ' + items.length + ' 题，正在准备打印…', 2000);
         Promise.all([waitForImages(box), new Promise(function (r) { setTimeout(r, 300); })])
-          .then(function () { document.getElementById('toast').hidden = true; window.print(); });
+          .then(function () { printPages(box); });
       };
       var prep = (opts.map && Bank.ensureMaps) ? Bank.ensureMaps().catch(function () { }) : Promise.resolve();
       if (opts.note) {

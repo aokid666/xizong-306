@@ -702,7 +702,8 @@ html[data-theme="dark"] mark.hl.c5{background:#3d2c4a;color:#f1e9f7}
 
 /* ---------- 导出打印 ---------- */
 #print-root{display:none}
-body.printing #print-root{display:block;background:#fff}
+body.printing #print-root{--pdf-width:186mm;display:block;width:var(--pdf-width);background:#fff}
+body.printing #print-root>.pg{width:var(--pdf-width)}
 body.printing header.topbar,body.printing main#app,body.printing footer,body.printing .session-bar,body.printing .pager{display:none!important}
 .pg{position:relative;padding:6mm 2mm;font-size:11.5pt;line-height:1.75;color:#000}
 .pg.divider{display:flex;flex-direction:column;align-items:center;justify-content:center;height:250mm;text-align:center}
