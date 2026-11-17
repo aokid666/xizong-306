@@ -72,30 +72,126 @@
       '" stroke-linecap="round" stroke-linejoin="round"/>';
   }
 
+  function strokeBounds(points) {
+    var box = { left: points[0], right: points[0], top: points[1], bottom: points[1] };
+    for (var i = 2; i + 1 < points.length; i += 2) {
+      box.left = Math.min(box.left, points[i]);
+      box.right = Math.max(box.right, points[i]);
+      box.top = Math.min(box.top, points[i + 1]);
+      box.bottom = Math.max(box.bottom, points[i + 1]);
+    }
+    return box;
+  }
+
+  function strokeShift(a, b) {
+    // Earlier questions may have expanded between strokes. Use the saved offsets
+    // within the same subquestion to put both strokes in the same coordinates.
+    return a.block === b.block && a.block >= 0 && a.yOffset != null && b.yOffset != null
+      ? a.yOffset - b.yOffset : 0;
+  }
+
+  function strokeGap(a, b) {
+    var shift = strokeShift(a, b);
+    var x = Math.max(0, b.box.left - a.box.right, a.box.left - b.box.right);
+    var y = Math.max(0, b.box.top - a.box.bottom - shift, a.box.top + shift - b.box.bottom);
+    return Math.hypot(x, y);
+  }
+
+  function distanceFromStart(entry, earlier) {
+    var x = entry.point[0], y = entry.point[1] + strokeShift(entry, earlier);
+    var p = earlier.point;
+    var distance = Math.hypot(x - p[0], y - p[1]);
+    for (var i = 2; i + 1 < p.length; i += 2) {
+      var dx = p[i] - p[i - 2], dy = p[i + 1] - p[i - 1];
+      var lengthSquared = dx * dx + dy * dy;
+      if (!lengthSquared) continue;
+      var fraction = ((x - p[i - 2]) * dx + (y - p[i - 1]) * dy) / lengthSquared;
+      fraction = Math.max(0, Math.min(1, fraction));
+      distance = Math.min(distance, Math.hypot(x - p[i - 2] - dx * fraction, y - p[i - 1] - dy * fraction));
+    }
+    return distance;
+  }
+
+  function attachFreehand(entries) {
+    var pending = entries.filter(function (entry) { return !entry.anchor; });
+    var frontier = entries.filter(function (entry) { return entry.anchor; });
+    frontier.forEach(function (entry, index) {
+      // An arrow drawn from a previous line can itself pick up another glyph.
+      // Keep that stroke with the earlier ink when its starting point touches it.
+      var nearest = entry.anchor.font / entry.anchor.scale / 2;
+      for (var i = 0; i < index; i++) {
+        var earlier = frontier[i];
+        if (strokeGap(entry, earlier) > nearest) continue;
+        var distance = distanceFromStart(entry, earlier);
+        if (distance >= nearest) continue;
+        nearest = distance;
+        entry.root = earlier.root;
+      }
+    });
+    // Follow a chain of nearby strokes (circle → arrow → handwriting).
+    // When two annotations are nearby, the shortest chain decides the anchor.
+    while (frontier.length && pending.length) {
+      var nearest = 0;
+      for (var i = 1; i < frontier.length; i++) {
+        if (frontier[i].distance < frontier[nearest].distance) nearest = i;
+      }
+      var current = frontier.splice(nearest, 1)[0];
+      if (!current.anchor) pending.splice(pending.indexOf(current), 1);
+      var root = current.root;
+      var gapLimit = 3 * root.anchor.font / root.anchor.scale;
+      pending.forEach(function (other) {
+        var gap = strokeGap(current, other);
+        var distance = current.distance + gap + gapLimit / 4;
+        if (gap > gapLimit || distance >= other.distance) return;
+        if (!other.root) frontier.push(other);
+        other.root = root;
+        other.distance = distance;
+      });
+    }
+  }
+
   function hwForPage(item, enabled) {
     var fields = new Map(), blocks = new Map();
     if (!enabled) return { fields: fields, blocks: blocks };
     item.qs.forEach(function (q, i) {
       var data = Store.hw(q.id);
       if (!data || !data.s) return;
-      data.s.forEach(function (st) {
+      var entries = data.s.filter(function (st) {
+        var p = st && (st.p || st);
+        return p && p.length >= 2;
+      }).map(function (st) {
         var p = st.p || st;
-        if (!p || p.length < 2) return;
         var at = st.textAnchor;
-        if (at && at.font > 0 && at.scale > 0 && Number.isInteger(at.index)) {
+        var anchor = at && at.font > 0 && at.scale > 0 && Number.isInteger(at.index) ? at : null;
+        var entry = {
+          stroke: st, point: p, anchor: anchor, box: strokeBounds(p),
+          block: st.a >= 0 ? i + st.a : (i || -1),
+          yOffset: st.a >= 0 && st.ay != null ? st.ay - p[1] : null,
+          root: null, distance: anchor ? 0 : Infinity
+        };
+        if (anchor) entry.root = entry;
+        return entry;
+      });
+      attachFreehand(entries);
+      entries.forEach(function (entry) {
+        var st = entry.stroke;
+        var root = entry.root;
+        if (root) {
+          var at = root.anchor;
+          var x0 = root.point[0] - at.dx / at.scale;
+          var y0 = root.point[1] - at.dy / at.scale - strokeShift(entry, root);
           var key = at.qid + '|' + at.field;
           if (!fields.has(key)) fields.set(key, []);
           fields.get(key).push({
             index: at.index,
             html: '<svg aria-hidden="true" viewBox="0 0 ' + at.font + ' ' + at.font + '">' +
-              hwStroke(data, st, p[0] - at.dx / at.scale, p[1] - at.dy / at.scale, at.scale) + '</svg>'
+              hwStroke(data, st, x0, y0, at.scale) + '</svg>'
           });
           return;
         }
-        var idx = st.a >= 0 ? i + st.a : (i || -1);
-        var y0 = 0;
-        if (st.a >= 0 && st.ay != null && item.qs[idx]) y0 = p[1] - st.ay;
-        var block = item.qs[idx] ? item.qs[idx].id : '';
+        var qAtBlock = item.qs[entry.block];
+        var block = qAtBlock ? qAtBlock.id : '';
+        var y0 = qAtBlock && entry.yOffset != null ? -entry.yOffset : 0;
         var w = data.w || 800, h = data.h || 400;
         var svg = '<svg aria-hidden="true" class="pg-hwover" viewBox="0 0 ' + w + ' ' + h + '">' +
           hwStroke(data, st, 0, y0, 1) + '</svg>';
