@@ -450,20 +450,9 @@
   function runWith(items, opts) {
     opts = opts || {};
     if (!items || !items.length) { U.toast('这里没有题目'); return; }
-    var box = document.getElementById('print-root');
     var full = Object.assign({ mark: true, note: true, hw: true, map: true, sort: 'bank' }, opts);
-    prepAll(items, full).then(function (imgs) {
-      var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
-      var mkCount = 0;
-      arr.forEach(function (it) { it.qs.forEach(function (q) { mkCount += Store.marks(q.id).length; }); });
-      if (opts.mark !== false && mkCount === 0) U.toast('提示：这批题里没有高亮/标注记录', 3000);
-      box.innerHTML = buildPages(arr, full, imgs).join('');
-      beginPrint(full.title);
-      U.toast('共 ' + arr.length + ' 组，正在准备打印…', 2000);
-      waitForImages(box).then(function () {
-        setTimeout(function () { printPages(box); }, 300);
-      });
-    });
+    var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
+    return exportGroups([{ items: arr, title: full.title }], full);
   }
 
   function prepAll(items, opts) {
@@ -473,6 +462,7 @@
 
   function waitForImages(box) {
     return Promise.all(Array.from(box.querySelectorAll('img'), function (img) {
+      if (img.decode) return img.decode().catch(function () { });
       if (img.complete) return Promise.resolve();
       return new Promise(function (resolve) {
         img.addEventListener('load', ready);
@@ -514,51 +504,89 @@
     });
   }
 
-  function printPages(box) {
-    fitPrintInk(box);
-    document.getElementById('toast').hidden = true;
-    window.print();
+  function waitForFrame() {
+    return new Promise(function (resolve) { requestAnimationFrame(resolve); });
   }
 
-  function beginPrint(title, done) {
-    var oldTitle = document.title;
-    if (title) document.title = title;
-    document.body.classList.add('printing');
-    window.addEventListener('afterprint', function () {
-      document.body.classList.remove('printing');
-      if (title) document.title = oldTitle;
-      if (done) done();
-    }, { once: true });
-  }
-
-  function printGroup(items, opts) {
-    return new Promise(function (resolve) {
-      var box = document.getElementById('print-root');
-      prepAll(items, opts).then(function (imgs) {
-        var arr = (opts.sort && opts.sort !== 'seq') ? sortItems(items, opts.sort) : items;
-        var mkCount = 0;
-        arr.forEach(function (it) { it.qs.forEach(function (q) { mkCount += Store.marks(q.id).length; }); });
-        if (opts.mark !== false && mkCount === 0) U.toast('提示：这批题里没有高亮/标注记录', 3000);
-        box.innerHTML = buildPages(arr, opts, imgs).join('');
-        beginPrint(opts.title, resolve);
-        waitForImages(box).then(function () {
-          U.toast('共 ' + arr.length + ' 组：请选择「另存为 PDF」', 4000);
-          setTimeout(function () { printPages(box); }, 400);
-        });
-      }).catch(function () { resolve(); });
+  function previewPrint(manual, label) {
+    return new Promise(function (resolve, reject) {
+      function afterPrint() { resolve(true); }
+      function open() {
+        var toast = document.getElementById('toast');
+        if (toast) toast.hidden = true;
+        window.addEventListener('afterprint', afterPrint, { once: true });
+        try { window.print(); }
+        catch (error) {
+          window.removeEventListener('afterprint', afterPrint);
+          reject(error);
+        }
+      }
+      if (!manual) { open(); return; }
+      var proceed = false;
+      U.modal({
+        title: 'PDF 排版完成',
+        body: '<p>' + esc(label) + '。请打开打印预览并选择「另存为 PDF」。</p>',
+        onClose: function () { if (proceed) open(); else resolve(false); },
+        onOpen: function () {
+          var primary = document.querySelector('#modal-foot .primary');
+          if (primary) primary.focus();
+        },
+        buttons: [
+          { label: '取消导出' },
+          { label: '打开打印预览', cls: 'primary', onClick: function () { proceed = true; } }
+        ]
+      });
     });
+  }
+
+  async function printGroup(items, opts, manual, prefix) {
+    var box = document.getElementById('print-root');
+    var oldTitle = document.title;
+    var label = prefix + '共 ' + items.length + ' 组题';
+    U.toast(label + '，正在排版…', 6000);
+    try {
+      var imgs = await prepAll(items, opts);
+      if (opts.title) document.title = opts.title;
+      document.body.classList.add('printing');
+      box.innerHTML = buildPages(items, opts, imgs).join('');
+      await Promise.all([waitForImages(box), document.fonts && document.fonts.ready]);
+      await waitForFrame();
+      fitPrintInk(box);
+      await waitForFrame();
+      return await previewPrint(manual, label);
+    } finally {
+      document.body.classList.remove('printing');
+      document.title = oldTitle;
+      box.innerHTML = '';
+    }
+  }
+
+  var exportInProgress = false;
+  async function exportGroups(groups, opts) {
+    if (exportInProgress) { U.toast('已有 PDF 正在导出'); return; }
+    exportInProgress = true;
+    var manual = Store.get('autoPrintPreview') === false;
+    try {
+      for (var i = 0; i < groups.length; i++) {
+        var group = groups[i];
+        var prefix = groups.length > 1 ? '第 ' + (i + 1) + ' / ' + groups.length + ' 册 · ' + group.title + '，' : '';
+        if (!(await printGroup(group.items, Object.assign({}, opts, { title: group.title }), manual, prefix))) return;
+      }
+      if (groups.length > 1) U.toast('全部分册已处理');
+    } catch (err) {
+      console.error(err);
+      U.toast('PDF 导出失败，请重试', 4000);
+    } finally {
+      exportInProgress = false;
+    }
   }
 
   window.ExportUI = {
     runMulti: function (groups, opts) {
-      var i = 0;
-      var next = function () {
-        if (i >= groups.length) { U.toast('全部导出完成', 2500); return; }
-        var g = groups[i++];
-        U.toast('第 ' + i + ' / ' + groups.length + ' 册：' + (g.title || ''), 3000);
-        printGroup(g.items, Object.assign({}, opts, { title: g.title })).then(function () { setTimeout(next, 600); });
-      };
-      next();
+      var sort = opts && opts.sort;
+      return exportGroups(groups.map(function (group) {
+        return { title: group.title, items: sort && sort !== 'seq' ? sortItems(group.items, sort) : group.items };
+      }), opts);
     },
     runItems: runWith,
     chooseItems: chooseItems,
@@ -570,21 +598,16 @@
       if (!items.length) { U.toast('这个范围里没有题目'); return; }
       items = sortItems(items, opts.sort);
       if (opts.limit) items = items.slice(0, opts.limit);
-      var box = document.getElementById('print-root');
-      var go = function (imgs) {
-        box.innerHTML = buildPages(items, opts, imgs).join('');
-        beginPrint(opts.title);
-        U.toast('共 ' + items.length + ' 题，正在准备打印…', 2000);
-        Promise.all([waitForImages(box), new Promise(function (r) { setTimeout(r, 300); })])
-          .then(function () { printPages(box); });
-      };
-      var prep = (opts.map && Bank.ensureMaps) ? Bank.ensureMaps().catch(function () { }) : Promise.resolve();
-      if (opts.note) {
-        U.toast('正在整理笔记与图片…', 2000);
-        prep.then(function () { return loadImages(items); }).then(go).catch(function () { go({}); });
-      } else {
-        prep.then(function () { go({}); }).catch(function () { go({}); });
-      }
+      if (!opts.multi) return exportGroups([{ items: items, title: opts.title }], opts);
+      var bySubject = new Map();
+      items.forEach(function (item) {
+        var subject = item.qs[0].subj || '其他';
+        if (!bySubject.has(subject)) bySubject.set(subject, []);
+        bySubject.get(subject).push(item);
+      });
+      return exportGroups(Array.from(bySubject, function (entry) {
+        return { title: entry[0], items: entry[1] };
+      }), opts);
     }
   };
 })();

@@ -98,6 +98,7 @@
       if (q0.kp) bits.push(tagHTML(q0.kp, 'metatag'));
     }
     return '<div class="card-hd">' +
+      '<span class="fav-gutter" role="img" aria-label="含收藏题" title="含收藏题" hidden>★</span>' +
       '<span class="card-idx">' + (index + 1) + '</span>' +
       '<div class="card-tags">' + bits.join('') +
       '<span class="flag-slot"></span>' +
@@ -325,13 +326,20 @@
     refreshActs(card, item);
   }
 
+  function hasFavorite(item) {
+    return item.qs.some(function (q) { return Store.isFav(q.id); });
+  }
+
   function refreshActs(card, item) {
     const q0 = item.qs[0];
+    card.querySelector('.fav-gutter').hidden = !hasFavorite(item);
     const favBtn = card.querySelector('[data-act="fav"]');
     if (favBtn) {
       const f = Store.isFav(q0.id);
       favBtn.classList.toggle('on', f);
       favBtn.textContent = f ? '★' : '☆';
+      favBtn.setAttribute('aria-pressed', String(f));
+      favBtn.title = f ? '取消收藏' : '收藏';
     }
     const flagSlot = card.querySelector('.flag-slot');
     if (flagSlot) {
@@ -1120,6 +1128,7 @@
     build: build,
     applyState: applyState,
     refreshActs: refreshActs,
+    hasFavorite: hasFavorite,
     openNote: openNote,
     markHidden: markHidden,
     isHidden: function (qid) { return HIDDEN.has(qid); },

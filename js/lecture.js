@@ -58,13 +58,17 @@
       '<button class="icon-btn" data-lb-hw="eraser" title="橡皮">⌫</button>' +
       '<button class="icon-btn" data-lb-hw="undo" title="撤销">↶</button>' +
       '<button class="icon-btn" data-lb-hw="clear" title="清空">✕</button>' +
-      '<button class="btn sm" data-lb-crop="1">框选</button>' +
+      '<button class="btn sm" data-lb-crop="1" aria-pressed="false">框选</button>' +
       '<span class="hint" data-lb-hint>' + (qid ? '框选后自动加入本题笔记' : '打开题目后可框选进笔记') + '</span>' +
       '</div>' +
       '<div class="lec-stage" data-lb-stage></div>';
 
     const $ = function (s) { return host.querySelector(s); };
     const stage = $('[data-lb-stage]');
+    const cropButton = $('[data-lb-crop]');
+    const cropHint = $('[data-lb-hint]');
+    const idleHint = cropHint.textContent;
+    let cropBox = null, cropDrag = null;
 
     function fillToc() {
       const sel = $('[data-lb-toc]');
@@ -74,11 +78,12 @@
     }
 
     function render() {
+      stopCrop();
       const n = idx + 1;
       $('[data-lb-page]').value = n;
       $('[data-lb-total]').textContent = '/ ' + book.pages;
       if (mode === 'single') {
-        stage.innerHTML = '<div class="lec-page-wrap"><img class="lec-page" src="' + pageImg(book, n) + '"><canvas class="lec-hw"></canvas></div>';
+        stage.innerHTML = '<div class="lec-page-wrap"><img class="lec-page" draggable="false" src="' + pageImg(book, n) + '"><canvas class="lec-hw"></canvas></div>';
         bindHw();
       } else {
         const from = Math.max(1, n - 2), to = Math.min(book.pages, n + 6);
@@ -169,62 +174,107 @@
     }
 
     /* 框选 -> 笔记 */
-    let cropping = false, cstart = null, boxEl = null;
+    function resetCropDrag() {
+      if (!cropDrag) return;
+      const id = cropDrag.id;
+      cropDrag = null;
+      cropBox.style.display = 'none';
+      if (stage.hasPointerCapture(id)) stage.releasePointerCapture(id);
+    }
+
+    function stopCrop() {
+      if (!cropBox) return;
+      resetCropDrag();
+      cropBox.remove();
+      cropBox = null;
+      stage.classList.remove('is-cropping');
+      cropButton.classList.remove('on');
+      cropButton.setAttribute('aria-pressed', 'false');
+      cropHint.textContent = idleHint;
+    }
+
     function startCrop() {
       if (!qid) { U.toast('先在某道题里打开讲义，才能框选进笔记'); return; }
-      cropping = true;
       const wrap = stage.querySelector('.lec-page-wrap');
-      if (!wrap) { U.toast('切到「单页」再框选'); cropping = false; return; }
-      boxEl = U.el('div', { class: 'lec-crop' });
-      wrap.appendChild(boxEl);
-      U.toast('在讲义上拖出一个矩形，松手即加入笔记');
+      if (!wrap) { U.toast('切到「单页」再框选'); return; }
+      const img = wrap.querySelector('.lec-page');
+      if (!img.naturalWidth) { U.toast('讲义图片尚未载入'); return; }
+      cropBox = U.el('div', { class: 'lec-crop' });
+      wrap.appendChild(cropBox);
+      stage.classList.add('is-cropping');
+      cropButton.classList.add('on');
+      cropButton.setAttribute('aria-pressed', 'true');
+      cropHint.textContent = '拖动框选，松手加入笔记。再次点击「框选」可恢复滚动。';
+    }
+
+    function cropPoint(img, e) {
+      const rect = img.getBoundingClientRect();
+      return {
+        x: U.clamp(e.clientX - rect.left, 0, rect.width),
+        y: U.clamp(e.clientY - rect.top, 0, rect.height),
+        width: rect.width, height: rect.height
+      };
+    }
+
+    function cropRect(e) {
+      const p = cropPoint(cropDrag.img, e);
+      return {
+        x: Math.min(cropDrag.x, p.x), y: Math.min(cropDrag.y, p.y),
+        w: Math.abs(p.x - cropDrag.x), h: Math.abs(p.y - cropDrag.y),
+        sx: cropDrag.img.naturalWidth / p.width, sy: cropDrag.img.naturalHeight / p.height
+      };
     }
 
     stage.addEventListener('pointerdown', function (e) {
-      if (!cropping) return;
-      const wrap = stage.querySelector('.lec-page-wrap');
-      if (!wrap) return;
-      const r = wrap.getBoundingClientRect();
-      cstart = { x: e.clientX - r.left, y: e.clientY - r.top, r: r };
-      boxEl.style.display = 'block';
-      boxEl.style.left = cstart.x + 'px';
-      boxEl.style.top = cstart.y + 'px';
-      boxEl.style.width = '0px';
-      boxEl.style.height = '0px';
+      const img = e.target.closest('.lec-page');
+      if (!cropBox || cropDrag || !e.isPrimary || e.button !== 0 || !img) return;
       e.preventDefault();
-    });
-    stage.addEventListener('pointermove', function (e) {
-      if (!cropping || !cstart) return;
-      const r = cstart.r;
-      const x = Math.min(Math.max(0, e.clientX - r.left), r.width);
-      const y = Math.min(Math.max(0, e.clientY - r.top), r.height);
-      boxEl.style.left = Math.min(cstart.x, x) + 'px';
-      boxEl.style.top = Math.min(cstart.y, y) + 'px';
-      boxEl.style.width = Math.abs(x - cstart.x) + 'px';
-      boxEl.style.height = Math.abs(y - cstart.y) + 'px';
-    });
-    stage.addEventListener('pointerup', function () {
-      if (!cropping || !cstart) return;
-      const bw = parseFloat(boxEl.style.width), bh = parseFloat(boxEl.style.height);
-      const bx = parseFloat(boxEl.style.left), by = parseFloat(boxEl.style.top);
-      cstart = null;
-      cropping = false;
-      boxEl.style.display = 'none';
-      if (bw < 12 || bh < 12) { U.toast('框选太小了'); return; }
-      const img = stage.querySelector('.lec-page');
-      const r = img.getBoundingClientRect();
-      const sx = img.naturalWidth / r.width, sy = img.naturalHeight / r.height;
-      const cv = document.createElement('canvas');
-      cv.width = Math.round(bw * sx);
-      cv.height = Math.round(bh * sy);
-      cv.getContext('2d').drawImage(img, bx * sx, by * sy, bw * sx, bh * sy, 0, 0, cv.width, cv.height);
-      const url = cv.toDataURL('image/png');
-      const id = U.uid();
-      Promise.all([Store.putImageOrig(id, url), Store.putImage(id, url)]).then(function () {
-        Store.addNoteImage(qid, id);
-        U.toast('已加入本题笔记');
+      const p = cropPoint(img, e);
+      cropDrag = { id: e.pointerId, x: p.x, y: p.y, img: img };
+      stage.setPointerCapture(e.pointerId);
+      Object.assign(cropBox.style, {
+        display: 'block', left: p.x + 'px', top: p.y + 'px', width: '0px', height: '0px'
       });
     });
+    stage.addEventListener('pointermove', function (e) {
+      if (!cropDrag || e.pointerId !== cropDrag.id) return;
+      const r = cropRect(e);
+      Object.assign(cropBox.style, {
+        left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px'
+      });
+    });
+    stage.addEventListener('pointerup', async function (e) {
+      if (!cropDrag || e.pointerId !== cropDrag.id) return;
+      const img = cropDrag.img;
+      const r = cropRect(e);
+      if (r.w < 12 || r.h < 12) {
+        resetCropDrag();
+        U.toast('框选太小了，请重新拖动');
+        return;
+      }
+      stopCrop();
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(r.w * r.sx));
+        cv.height = Math.max(1, Math.round(r.h * r.sy));
+        cv.getContext('2d').drawImage(img, r.x * r.sx, r.y * r.sy, r.w * r.sx, r.h * r.sy, 0, 0, cv.width, cv.height);
+        const url = cv.toDataURL('image/png');
+        const id = U.uid();
+        await Promise.all([Store.putImageOrig(id, url), Store.putImage(id, url)]);
+        Store.addNoteImage(qid, id);
+        U.toast('已加入本题笔记');
+      } catch (err) {
+        U.toast('截图保存失败，请重新框选');
+      }
+    });
+    function cancelPointer(e) {
+      if (cropDrag && e.pointerId === cropDrag.id) resetCropDrag();
+    }
+    stage.addEventListener('pointercancel', cancelPointer);
+    stage.addEventListener('lostpointercapture', cancelPointer);
+    stage.addEventListener('wheel', function (e) {
+      if (cropBox) e.preventDefault();
+    }, { passive: false });
 
     /* 事件 */
     host.addEventListener('click', function (e) {
@@ -249,6 +299,7 @@
         const cv = host.querySelector('canvas.lec-hw');
         if (act === 'undo') { host._hw.undo(); return; }
         if (act === 'clear') { host._hw.clear(); return; }
+        stopCrop();
         // 再点同一个工具 = 关闭手写
         const on = h.classList.contains('on');
         host.querySelectorAll('[data-lb-hw]').forEach(function (x) { x.classList.remove('on'); });
@@ -264,7 +315,10 @@
         return;
       }
       const c = e.target.closest('[data-lb-crop]');
-      if (c) { startCrop(); return; }
+      if (c) {
+        if (cropBox) stopCrop();
+        else startCrop();
+      }
     });
 
     host.addEventListener('change', function (e) {

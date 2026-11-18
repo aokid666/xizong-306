@@ -355,6 +355,7 @@
       fontSize: 17,
       hwAlways: false,
       showExplainAuto: false,
+      autoPrintPreview: true,
       includeHumanityInYear: false,
       mode: 'scroll'
     },

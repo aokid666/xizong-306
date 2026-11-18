@@ -1090,11 +1090,14 @@
     html += '<div class="field"><div class="k">章节</div><div class="v" style="max-height:200px;overflow:auto" data-exp-chapbox>' +
       '<span class="hint">不勾＝所选科目的全部章节</span></div></div>';
     html += '<div class="field"><div class="k">分册方式</div><div class="v">' +
-      '<label class="chk"><input type="checkbox" data-exp-multi> 每个科目单独生成一个 PDF（关掉打印窗口后自动准备下一册）</label></div></div>';
+      '<label class="chk"><input type="checkbox" data-exp-multi> 每个科目单独导出一个 PDF</label></div></div>';
     html += '<div class="field"><div class="k">数量</div><div class="v">' +
       '<input class="input" type="number" min="1" data-exp-limit placeholder="留空＝全部" style="width:120px"></div></div>';
-    html += '<div style="display:flex;gap:12px;margin-top:20px"><button class="btn primary" data-exp-go="1">生成并打印 / 存为 PDF</button>' +
-      '<span class="hint">弹出打印窗口后，目标选择「另存为 PDF」即可</span></div>';
+    const autoPrintPreview = Store.get('autoPrintPreview') !== false;
+    html += '<div style="display:flex;gap:12px;margin-top:20px"><button class="btn primary" data-exp-go="1">' +
+      (autoPrintPreview ? '生成并打印 / 存为 PDF' : '准备 PDF') + '</button>' +
+      '<span class="hint">' + (autoPrintPreview ? '在打印窗口中选择「另存为 PDF」' : '排版完成后，点击「打开打印预览」') +
+      '</span></div>';
     shell(html);
     let scope = 'all', sort = 'bank';
     // 记住上次的导出偏好
@@ -1166,6 +1169,7 @@
             map: !!app().querySelector('[data-exp-map]').checked,
             withAnswer: !!app().querySelector('[data-exp-ans]').checked,
             withExplanation: !!app().querySelector('[data-exp-exp]').checked,
+            multi: !!app().querySelector('[data-exp-multi]').checked,
 
             limit: parseInt((app().querySelector('[data-exp-limit]') || {}).value, 10) || 0
           });
@@ -1532,6 +1536,7 @@
       '<span class="hint" style="margin-left:8px">改过答案的题都在这里，可一键恢复原答案</span></div></div>';
     html += '<div class="field"><div class="k">导出</div><div class="v">' +
       '<a class="btn sm" href="#/export">导出 PDF（一题一面 · 收藏打星）</a>' +
+      '<label class="chk"><input type="checkbox" data-setbool="autoPrintPreview" checked> 排版完成后自动打开打印预览</label>' +
       '<span class="hint" style="margin-left:8px">按年份/章节排序，可只导收藏或错题</span></div></div>';
     html += '<div class="field"><div class="k">存储状态</div><div class="v"><span class="hint" data-storage></span></div></div>';
     html += '<div class="field"><div class="k">关于</div><div class="v"><span class="hint">真题库 ' + U.fmtNum(Bank.meta.total) + ' 题（' +

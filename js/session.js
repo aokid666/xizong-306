@@ -853,7 +853,7 @@
       { t: 'C 型题', test: function (q) { return q.t === 'C'; } },
       { t: 'X 型题（多选）', test: function (q) { return q.t === 'X'; } }
     ];
-    body.innerHTML = '<p class="hint" style="margin-bottom:14px">灰=已选未交　绿=对　红=错　右上角红点=已标记</p>';
+    body.innerHTML = '<p class="hint" style="margin-bottom:14px">灰=已选未交　绿=对　红=错　红点=已标记　<span class="sheet-fav-key">★</span>=收藏</p>';
     groups.forEach(function (g) {
       const rows = [];
       S.items.forEach(function (it, i) { if (g.test(it.qs[0])) rows.push(i); });
@@ -866,7 +866,11 @@
         const sub = it.qs.every(function (q) { return S.res[q.id]; });
         const ok = it.qs.every(function (q) { return S.res[q.id] && S.res[q.id].ok; });
         const cls = 'btn-sheet' + (sub ? (ok ? ' ok' : ' no') : (S.sel[q0.id] ? ' done' : '')) + (i === S.idx ? ' cur' : '') + (Store.flag(q0.id) ? ' flag' : '');
-        grid.appendChild(U.el('button', { class: cls, 'data-jump': i, title: q0.label }, String(i + 1)));
+        const favorite = Card.hasFavorite(it);
+        grid.appendChild(U.el('button', {
+          class: cls, 'data-jump': i, title: q0.label,
+          'aria-label': favorite ? '第 ' + (i + 1) + ' 题，含收藏题' : null
+        }, (favorite ? '<span class="sheet-fav" aria-hidden="true">★</span>' : '') + (i + 1)));
       });
       body.appendChild(grid);
     });
