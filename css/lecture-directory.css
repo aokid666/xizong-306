@@ -1,0 +1,236 @@
+.lec-host {
+  --lec-catalog-accent: #245990;
+  --lec-catalog-active: #eaf2fb;
+}
+
+html[data-theme="dark"] .lec-host {
+  --lec-catalog-accent: #a6cbf5;
+  --lec-catalog-active: #24344a;
+}
+
+.lec-bar .lec-catalog-toggle {
+  border-color: var(--lec-catalog-accent);
+  color: var(--lec-catalog-accent);
+  font-weight: 650;
+  min-height: 34px;
+}
+
+.lec-bar .lec-catalog-toggle[aria-expanded="true"] {
+  background: var(--lec-catalog-active);
+}
+
+.lec-location {
+  overflow: hidden;
+  margin: 0 0 8px;
+  padding-left: 9px;
+  border-left: 3px solid var(--lec-catalog-accent);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.lec-reading-area {
+  position: relative;
+}
+
+.lec-catalog {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  width: min(390px, 100%);
+  max-height: min(540px, calc(100vh - 195px));
+  max-height: min(540px, calc(100dvh - 195px));
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.lec-catalog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 0;
+}
+
+.lec-catalog-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.lec-catalog-head .icon-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 20px;
+}
+
+.lec-catalog-search {
+  padding: 6px 12px 10px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.lec-catalog-search .input {
+  width: 100%;
+  background: var(--paper-2);
+  color: var(--ink);
+}
+
+.lec-catalog-scroll {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 4px 8px 10px;
+}
+
+.lec-catalog-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+[data-lb-tree] > .lec-catalog-list > li + li {
+  border-top: 1px solid var(--line-2);
+}
+
+[data-lb-tree] > .lec-catalog-list > li > .lec-catalog-row > .lec-catalog-link {
+  font-weight: 650;
+}
+
+.lec-catalog-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.lec-catalog-branch {
+  margin-left: 10px;
+  border-left: 1px solid var(--line-2);
+}
+
+.lec-catalog-fold,
+.lec-catalog-fold-slot {
+  flex: 0 0 30px;
+}
+
+.lec-catalog-fold {
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.lec-catalog-fold span {
+  display: inline-block;
+}
+
+.lec-catalog-fold[aria-expanded="true"] span {
+  transform: rotate(90deg);
+}
+
+.lec-catalog-link {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.lec-catalog-link[aria-current] {
+  background: var(--lec-catalog-active);
+  color: var(--lec-catalog-accent);
+  font-weight: 650;
+}
+
+.lec-catalog-page {
+  flex: none;
+  min-width: 32px;
+  text-align: right;
+  color: var(--muted);
+  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.lec-catalog-link[aria-current] .lec-catalog-page {
+  color: inherit;
+}
+
+.lec-catalog-hit {
+  width: 100%;
+}
+
+.lec-catalog-hit mark {
+  background: var(--hl);
+  color: var(--ink);
+  border-radius: 2px;
+}
+
+.lec-catalog-hit-group + .lec-catalog-hit-group {
+  margin-top: 10px;
+}
+
+.lec-catalog-hit-group h4 {
+  margin: 5px 0 3px;
+  padding: 4px 8px;
+  background: var(--paper-2);
+  color: var(--ink-2);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.lec-catalog-hit-group h4 span,
+.lec-catalog-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.lec-catalog-empty {
+  margin: 6px 8px;
+}
+
+.lec-catalog button:focus-visible,
+.lec-catalog-search .input:focus-visible {
+  outline: 2px solid var(--lec-catalog-accent);
+  outline-offset: -2px;
+}
+
+@media (max-width: 640px) {
+  .drawer-panel.lecture-drawer {
+    width: 100%;
+  }
+}
+
+@media (hover: hover) {
+  .lec-catalog-fold:hover,
+  .lec-catalog-link:hover:not([aria-current]) {
+    background: var(--paper-2);
+    color: var(--ink);
+  }
+}
+
+@media (pointer: coarse) {
+  .lec-bar .lec-catalog-toggle,
+  .lec-catalog-link,
+  .lec-catalog-head .icon-btn {
+    min-height: 42px;
+  }
+
+  .lec-catalog-fold,
+  .lec-catalog-fold-slot {
+    flex-basis: 42px;
+  }
+}

@@ -416,7 +416,7 @@
     const subq = card.querySelector('.subq[data-qid="' + qid + '"]') || card;
     let wrap = subq.querySelector('.note-wrap');
     if (!wrap) {
-      wrap = U.el('div', { class: 'note-wrap' });
+      wrap = U.el('div', { class: 'note-wrap', 'data-owner': qid });
       subq.appendChild(wrap);
     }
     if (wrap.dataset.open === '1') {
@@ -435,53 +435,118 @@
     renderNote(wrap, qid, card);
   }
 
-  function noteImgEl(wrap, id) {
-    const holder = wrap.querySelector('[data-img-wrap="' + id + '"]');
+  function noteImgEl(wrap, block) {
+    const id = block.v;
+    const holder = wrap.querySelector('[data-img-wrap="' + CSS.escape(String(id)) + '"]');
     if (!holder) return;
     holder.innerHTML = '<div class="nb-loading">图片加载中…</div>';
     Store.getImageOrig(id).then(function (orig) {
       return orig || Store.getImage(id);
     }).then(function (src) {
+      if (!holder.isConnected || (wrap._inkEditor && wrap._inkEditor.bid === block.i)) return;
+      if (!src && block.ink) src = NoteInk.preview(block.ink);
       if (!src) { holder.innerHTML = '<div class="nb-loading">图片已丢失</div>'; return; }
       holder.innerHTML = '';
-      const img = U.el('img', { alt: '笔记图片', src: src });
+      const img = U.el('img', { alt: block.ink ? '手写笔记' : '笔记图片', src: src });
       img.addEventListener('click', function () { U.zoom(src, '笔记图片'); });
       holder.appendChild(img);
     });
   }
 
+  function refreshNote(qid) {
+    U.$$('.note-wrap[data-open="1"]').forEach(function (wrap) {
+      if (wrap.dataset.owner !== qid) return;
+      const card = wrap.closest('.card');
+      renderNote(wrap, qid, card);
+      if (card) refreshActs(card, card._item);
+    });
+  }
+
+  function editNoteInk(wrap, qid, card, block) {
+    if (wrap._inkEditor) {
+      wrap._inkEditor.host.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    const host = U.el('div', { class: 'nb nb-ink-editor' });
+    const editor = { host: host, bid: block && block.i };
+    wrap._inkEditor = editor;
+    const finish = function () {
+      if (wrap._inkEditor !== editor) return;
+      if (editor.dispose) editor.dispose();
+      wrap._inkEditor = null;
+      renderNote(wrap, qid, card);
+      if (card) refreshActs(card, card._item);
+    };
+    mountNoteInkHost(wrap);
+    editor.dispose = NoteInk.mount(host, block && block.ink, async function (ink, png) {
+      await Store.saveNoteInk(qid, editor.bid, ink, png);
+      finish();
+      U.toast('手写笔记已保存');
+    }, finish);
+    host.scrollIntoView({ block: 'nearest' });
+  }
+
+  function mountNoteInkHost(wrap) {
+    const editor = wrap._inkEditor;
+    if (!editor) return;
+    const block = editor.bid && wrap.querySelector('[data-bid="' + CSS.escape(String(editor.bid)) + '"]');
+    if (block) block.querySelector('.nb-img').replaceChildren(editor.host);
+    else wrap.querySelector('.nb-list').appendChild(editor.host);
+  }
+
+  function disposeNoteEditors(root) {
+    if (!root) return;
+    U.$$('.note-wrap', root).forEach(function (wrap) {
+      const editor = wrap._inkEditor;
+      if (!editor) return;
+      if (editor.dispose) editor.dispose();
+      wrap._inkEditor = null;
+    });
+  }
+
   function renderNote(wrap, qid, card) {
+    wrap.querySelectorAll('textarea[data-nb-text]').forEach(function (ta) {
+      const n = Store.note(qid);
+      const b = n && n.blocks.find(function (entry) { return entry.i === ta.closest('.nb').dataset.bid; });
+      if (b && b.v !== ta.value) Store.updateNoteBlock(qid, b.i, ta.value);
+    });
     const n = Store.note(qid) || { blocks: [] };
     const blocks = n.blocks || [];
     let html = '';
     if (!blocks.length) {
-      html += '<div class="nb-empty hint">还没有笔记。点下面「＋ 文字 / ＋ 图片」，或直接 Ctrl+V 粘贴截图。</div>';
+      html += '<div class="nb-empty hint">添加文字、图片或手写笔记</div>';
     }
     html += '<div class="nb-list">';
     blocks.forEach(function (b, idx) {
       const bar = '<div class="nb-bar">' +
-        '<span class="nb-idx">' + (b.k === 't' ? '文字' : '图片') + ' ' + (idx + 1) + '</span>' +
+        '<span class="nb-idx">' + (b.k === 't' ? '文字' : (b.ink ? '手写' : '图片')) + ' ' + (idx + 1) + '</span>' +
         '<span style="flex:1"></span>' +
+        (b.source && b.source.type === 'lecture' ? '<button class="btn ghost sm" data-nb="source">查看讲义原页</button>' : '') +
+        (b.ink ? '<button class="btn ghost sm" data-nb="editink">编辑手写</button>' : '') +
         '<button class="icon-btn" data-nb="up" title="上移">↑</button>' +
         '<button class="icon-btn" data-nb="down" title="下移">↓</button>' +
         '<button class="icon-btn" data-nb="del" title="删除这一段">✕</button></div>';
       if (b.k === 't') {
-        html += '<div class="nb" data-bid="' + b.i + '">' + bar +
+        html += '<div class="nb" data-bid="' + esc(b.i) + '">' + bar +
           '<textarea class="nb-text" data-nb-text placeholder="写点什么…">' + esc(b.v || '') + '</textarea></div>';
       } else {
-        html += '<div class="nb" data-bid="' + b.i + '">' + bar +
-          '<div class="nb-img" data-img-wrap="' + b.v + '"></div></div>';
+        html += '<div class="nb" data-bid="' + esc(b.i) + '">' + bar +
+          '<div class="nb-img" data-img-wrap="' + esc(b.v) + '"></div></div>';
       }
     });
     html += '</div>';
     html += '<div class="note-tools">' +
       '<button class="btn ghost sm" data-nb="addtext">＋ 文字</button>' +
       '<button class="btn ghost sm" data-nb="addimg">＋ 图片</button>' +
-      '<span class="hint">↑↓ 调顺序 · Ctrl+V 粘贴截图 · 图片按原图完整显示</span>' +
+      '<button class="btn ghost sm" data-nb="addink">＋ 手写</button>' +
+      '<span class="hint">Ctrl+V 粘贴截图</span>' +
       '<span style="flex:1"></span><span data-note-saved></span></div>';
     wrap.innerHTML = html;
 
-    blocks.forEach(function (b) { if (b.k === 'i') noteImgEl(wrap, b.v); });
+    blocks.forEach(function (b) {
+      if (b.k === 'i' && (!wrap._inkEditor || wrap._inkEditor.bid !== b.i)) noteImgEl(wrap, b);
+    });
+    mountNoteInkHost(wrap);
 
     const saveTip = wrap.querySelector('[data-note-saved]');
     const markSaved = function () { if (saveTip) saveTip.textContent = '已保存 ' + U.fmtTime(Date.now()).slice(11); };
@@ -512,6 +577,15 @@
       const act = b.dataset.nb;
       const nb = b.closest('.nb');
       const bid = nb && nb.dataset.bid;
+      const block = bid && blocks.find(function (entry) { return entry.i === bid; });
+      if (act === 'source' && block) {
+        LectureUI.openSource(block.source, qid, b);
+        return;
+      }
+      if (act === 'addink' || (act === 'editink' && block)) {
+        editNoteInk(wrap, qid, card, block);
+        return;
+      }
       if (act === 'addtext') {
         Store.addNoteBlock(qid, { k: 't', v: '' });
         renderNote(wrap, qid, card);
@@ -539,6 +613,10 @@
           body: '<p>' + (isImg ? '图片会从本机删除；开了云端同步的话云端也会删。' : '这段文字会删除。') + '删除后无法恢复。</p>',
           buttons: [{ label: '取消' }, {
             label: '删除', cls: 'primary', onClick: function () {
+              if (wrap._inkEditor && wrap._inkEditor.bid === bid) {
+                if (wrap._inkEditor.dispose) wrap._inkEditor.dispose();
+                wrap._inkEditor = null;
+              }
               Store.removeNoteBlock(qid, bid);
               renderNote(wrap, qid, card);
               if (card) refreshActs(card, card._item);
@@ -1130,6 +1208,8 @@
     refreshActs: refreshActs,
     hasFavorite: hasFavorite,
     openNote: openNote,
+    refreshNote: refreshNote,
+    disposeNoteEditors: disposeNoteEditors,
     markHidden: markHidden,
     isHidden: function (qid) { return HIDDEN.has(qid); },
     reveal: function (card, qid) {

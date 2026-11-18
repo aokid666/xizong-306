@@ -372,17 +372,23 @@
 
   /* 预先取出笔记图片（IndexedDB，异步） */
   function loadImages(items) {
-    var ids = [];
+    var images = new Map();
     items.forEach(function (it) {
       it.qs.forEach(function (q) {
         var n = Store.note(q.id);
         if (!n || !n.blocks) return;
-        n.blocks.forEach(function (b) { if (b.k === 'i' && b.v) ids.push(b.v); });
+        n.blocks.forEach(function (b) { if (b.k === 'i' && b.v) images.set(b.v, b.ink); });
       });
     });
-    var map = {};
-    return Promise.all(ids.map(function (id) {
-      return Store.getImage(id).then(function (src) { if (src) map[id] = src; }).catch(function () { });
+    var map = Object.create(null);
+    return Promise.all(Array.from(images, function (entry) {
+      var id = entry[0], ink = entry[1];
+      return Store.getImage(id).then(function (src) {
+        return src || Store.getImageOrig(id);
+      }).then(function (src) {
+        if (!src && ink && window.NoteInk) src = NoteInk.preview(ink);
+        if (src) map[id] = src;
+      }).catch(function () { });
     })).then(function () { return map; });
   }
 

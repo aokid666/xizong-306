@@ -5,6 +5,7 @@
   'use strict';
 
   let cache = null;
+  let sourcePane = null, sourceLauncher = null, openRequest = 0;
   const BASE = (function () {
     try {
       const s = document.currentScript;
@@ -37,16 +38,16 @@
     let book = null, idx = 0, mode = 'single', dir = 'v';
     let hw = null;   // {api}
     const qid = opts.qid || null;
+    const catalogId = 'lecture-catalog-' + U.uid();
 
     host.innerHTML =
       '<div class="lec-bar">' +
-      '<select class="select" data-lb-book></select>' +
-      '<select class="select" data-lb-toc style="max-width:190px"></select>' +
-      '<input class="input" data-lb-q placeholder="搜讲义内容" style="width:130px">' +
-      '<button class="btn ghost sm" data-lb-go="prev">←</button>' +
-      '<input class="input" data-lb-page type="number" style="width:64px">' +
+      '<select class="select" data-lb-book aria-label="讲义版本"></select>' +
+      '<button type="button" class="btn sm lec-catalog-toggle" data-lb-toc aria-expanded="false" aria-controls="' + catalogId + '">目录</button>' +
+      '<button class="btn ghost sm" data-lb-go="prev" aria-label="上一页">←</button>' +
+      '<input class="input" data-lb-page type="number" aria-label="页码" style="width:64px">' +
       '<span class="hint" data-lb-total></span>' +
-      '<button class="btn ghost sm" data-lb-go="next">→</button>' +
+      '<button class="btn ghost sm" data-lb-go="next" aria-label="下一页">→</button>' +
       '<span style="flex:1"></span>' +
       '<button class="btn ghost sm on" data-lb-mode="single">单页</button>' +
       '<button class="btn ghost sm" data-lb-mode="list">连续</button>' +
@@ -61,7 +62,15 @@
       '<button class="btn sm" data-lb-crop="1" aria-pressed="false">框选</button>' +
       '<span class="hint" data-lb-hint>' + (qid ? '框选后自动加入本题笔记' : '打开题目后可框选进笔记') + '</span>' +
       '</div>' +
-      '<div class="lec-stage" data-lb-stage></div>';
+      '<div class="lec-location" data-lb-location hidden></div>' +
+      '<div class="lec-reading-area">' +
+      '<div class="lec-stage" data-lb-stage></div>' +
+      '<aside class="lec-catalog" id="' + catalogId + '" aria-label="讲义目录" hidden>' +
+      '<div class="lec-catalog-head"><h3 tabindex="-1">讲义目录</h3>' +
+      '<button type="button" class="icon-btn" data-lb-toc-close aria-label="关闭目录">×</button></div>' +
+      '<div class="lec-catalog-search"><input type="search" class="input" data-lb-q placeholder="搜章节或讲义正文" aria-label="搜索章节或讲义正文"></div>' +
+      '<div class="lec-catalog-scroll" data-lb-toc-scroll><div data-lb-tree></div><div data-lb-hits hidden></div></div>' +
+      '</aside></div>';
 
     const $ = function (s) { return host.querySelector(s); };
     const stage = $('[data-lb-stage]');
@@ -69,12 +78,138 @@
     const cropHint = $('[data-lb-hint]');
     const idleHint = cropHint.textContent;
     let cropBox = null, cropDrag = null;
+    const catalog = $('#' + catalogId), catalogToggle = $('[data-lb-toc]');
+    const locationLabel = $('[data-lb-location]');
+    const tocScroll = $('[data-lb-toc-scroll]');
+    const tocTree = $('[data-lb-tree]'), searchHits = $('[data-lb-hits]'), searchInput = $('[data-lb-q]');
+    let entries = [], activeEntry = null, locationHint = null, timer = null;
+
+    function tocBranch(nodes) {
+      return '<ul class="lec-catalog-list">' + nodes.map(function (entry) {
+        const expand = entry.children.length
+          ? '<button type="button" class="lec-catalog-fold" data-lb-fold="' + entry.id + '" aria-expanded="false" aria-label="展开' + esc(entry.title) + '"><span aria-hidden="true">›</span></button>'
+          : '<span class="lec-catalog-fold-slot"></span>';
+        return '<li><div class="lec-catalog-row">' + expand +
+          '<button type="button" class="lec-catalog-link" data-lb-entry="' + entry.id + '">' +
+          '<span>' + esc(entry.title) + '</span><span class="lec-catalog-page">' + entry.page + '</span></button></div>' +
+          (entry.children.length ? '<div class="lec-catalog-branch" data-lb-branch="' + entry.id + '" hidden>' + tocBranch(entry.children) + '</div>' : '') +
+          '</li>';
+      }).join('') + '</ul>';
+    }
 
     function fillToc() {
-      const sel = $('[data-lb-toc]');
-      sel.innerHTML = '<option value="1">目录</option>' + book.toc.map(function (t) {
-        return '<option value="' + t.p + '">' + '　'.repeat(Math.max(0, t.d - 1)) + esc(t.t) + '</option>';
-      }).join('');
+      const roots = [], stack = [];
+      entries = [];
+      activeEntry = null;
+      locationHint = null;
+      const toc = book.toc || [];
+      const rows = toc.some(function (t) { return t.p === 1; }) ? toc : [{ t: '讲义首页', p: 1, d: 0 }].concat(toc);
+      rows.forEach(function (t) {
+        const depth = Math.max(0, t.d || 0);
+        while (stack.length && stack[stack.length - 1].depth >= depth) stack.pop();
+        const parent = stack[stack.length - 1] || null;
+        const entry = { id: entries.length, title: t.t, page: t.p, depth: depth, parent: parent, children: [] };
+        (parent ? parent.children : roots).push(entry);
+        entries.push(entry);
+        stack.push(entry);
+      });
+      tocTree.innerHTML = tocBranch(roots);
+      tocScroll.scrollTop = 0;
+      clearTimeout(timer);
+      searchInput.value = '';
+      updateSearch();
+    }
+
+    function expandEntry(entry, open) {
+      const control = tocTree.querySelector('[data-lb-fold="' + entry.id + '"]');
+      if (!control) return;
+      control.setAttribute('aria-expanded', String(open));
+      control.setAttribute('aria-label', (open ? '收起' : '展开') + entry.title);
+      tocTree.querySelector('[data-lb-branch="' + entry.id + '"]').hidden = !open;
+    }
+
+    function showCurrentChapter() {
+      let entry = locationHint;
+      if (!entry || entry.page !== idx + 1) {
+        entry = null;
+        entries.forEach(function (candidate) {
+          if (candidate.page <= idx + 1 && (!entry || candidate.page >= entry.page)) entry = candidate;
+        });
+      }
+      if (activeEntry) tocTree.querySelector('[data-lb-entry="' + activeEntry.id + '"]').removeAttribute('aria-current');
+      activeEntry = entry;
+      locationLabel.hidden = !entry;
+      if (!entry) return;
+      let root = entry;
+      while (root.parent) root = root.parent;
+      locationLabel.textContent = root === entry ? entry.title : root.title + ' / ' + entry.title;
+      locationLabel.title = locationLabel.textContent;
+      tocTree.querySelector('[data-lb-entry="' + entry.id + '"]').setAttribute('aria-current', 'location');
+    }
+
+    function toggleCatalog(open) {
+      catalog.hidden = !open;
+      catalogToggle.setAttribute('aria-expanded', String(open));
+      if (!open) {
+        catalogToggle.focus({ preventScroll: true });
+        return;
+      }
+      catalog.querySelector('h3').focus({ preventScroll: true });
+      if (!searchInput.value.trim()) revealCurrentChapter();
+    }
+
+    function revealCurrentChapter() {
+      if (catalog.hidden || !activeEntry) return;
+      for (let entry = activeEntry; entry; entry = entry.parent) expandEntry(entry, true);
+      const row = tocTree.querySelector('[aria-current]');
+      tocScroll.scrollTop += row.getBoundingClientRect().top - tocScroll.getBoundingClientRect().top - 12;
+    }
+
+    function matchLabel(text, start, length, snippet) {
+      const from = snippet ? Math.max(0, start - 14) : 0;
+      const to = snippet ? Math.min(text.length, start + length + 26) : text.length;
+      return (from ? '…' : '') + esc(text.slice(from, start)) + '<mark>' +
+        esc(text.slice(start, start + length)) + '</mark>' + esc(text.slice(start + length, to)) +
+        (to < text.length ? '…' : '');
+    }
+
+    function hitRow(page, label, entry) {
+      return '<button type="button" class="lec-catalog-link lec-catalog-hit" data-lb-hit="' + page + '"' +
+        (entry ? ' data-lb-hit-entry="' + entry.id + '"' : '') + '><span>' + label +
+        '</span><span class="lec-catalog-page">' + page + '</span></button>';
+    }
+
+    function updateSearch() {
+      const q = searchInput.value.trim().toLowerCase();
+      tocTree.hidden = !!q;
+      searchHits.hidden = !q;
+      if (!q) { revealCurrentChapter(); return; }
+      const limit = 30;
+      const headings = [], content = [];
+      let headingCount = 0, contentCount = 0;
+      entries.forEach(function (entry) {
+        const start = entry.title.toLowerCase().indexOf(q);
+        if (start < 0) return;
+        headingCount++;
+        if (headings.length < limit) headings.push(hitRow(entry.page, matchLabel(entry.title, start, q.length, false), entry));
+      });
+      (book.txt || []).forEach(function (text, i) {
+        const start = (text || '').toLowerCase().indexOf(q);
+        if (start < 0) return;
+        contentCount++;
+        if (content.length < limit) content.push(hitRow(i + 1, matchLabel(text, start, q.length, true)));
+      });
+      const group = function (label, hits, count) {
+        if (!hits.length) return '';
+        return '<div class="lec-catalog-hit-group"><h4>' + label + ' <span>' + count + '</span></h4>' +
+          hits.join('') + '</div>';
+      };
+      searchHits.innerHTML = group('章节', headings, headingCount) + group('正文', content, contentCount) ||
+        '<p class="lec-catalog-empty">没有找到匹配的章节或页面。</p>';
+      if (headingCount > limit || contentCount > limit) {
+        searchHits.innerHTML += '<p class="lec-catalog-empty">每类显示前 ' + limit + ' 条，试试更具体的关键词。</p>';
+      }
+      tocScroll.scrollTop = 0;
     }
 
     function render() {
@@ -82,22 +217,26 @@
       const n = idx + 1;
       $('[data-lb-page]').value = n;
       $('[data-lb-total]').textContent = '/ ' + book.pages;
+      showCurrentChapter();
       if (mode === 'single') {
         stage.innerHTML = '<div class="lec-page-wrap"><img class="lec-page" draggable="false" src="' + pageImg(book, n) + '"><canvas class="lec-hw"></canvas></div>';
         bindHw();
       } else {
-        const from = Math.max(1, n - 2), to = Math.min(book.pages, n + 6);
+        const to = Math.min(book.pages, n + 6);
         let h = '';
-        for (let i = from; i <= to; i++) h += '<div class="lec-item" data-pg="' + i + '"><img class="lec-page" loading="lazy" src="' + pageImg(book, i) + '"><div class="lec-cap">' + i + '</div></div>';
+        for (let i = n; i <= to; i++) h += '<div class="lec-item" data-pg="' + i + '"><img class="lec-page" loading="lazy" src="' + pageImg(book, i) + '"><div class="lec-cap">' + i + '</div></div>';
         stage.className = 'lec-stage' + (dir === 'h' ? ' h' : '');
         stage.innerHTML = h;
       }
       stage.className = 'lec-stage' + (mode === 'list' && dir === 'h' ? ' h' : '');
     }
 
-    function go(n) {
+    function go(n, entry) {
+      locationHint = entry || null;
       idx = Math.max(0, Math.min(book.pages - 1, n - 1));
       render();
+      stage.scrollTop = 0;
+      stage.scrollLeft = 0;
     }
 
     /* 手写 */
@@ -253,6 +392,7 @@
         return;
       }
       stopCrop();
+      const source = { type: 'lecture', bookId: book.id, page: idx + 1 };
       try {
         const cv = document.createElement('canvas');
         cv.width = Math.max(1, Math.round(r.w * r.sx));
@@ -261,7 +401,8 @@
         const url = cv.toDataURL('image/png');
         const id = U.uid();
         await Promise.all([Store.putImageOrig(id, url), Store.putImage(id, url)]);
-        Store.addNoteImage(qid, id);
+        Store.addNoteImage(qid, id, source);
+        if (window.Card) Card.refreshNote(qid);
         U.toast('已加入本题笔记');
       } catch (err) {
         U.toast('截图保存失败，请重新框选');
@@ -278,6 +419,22 @@
 
     /* 事件 */
     host.addEventListener('click', function (e) {
+      if (e.target.closest('[data-lb-toc], [data-lb-toc-close]')) {
+        toggleCatalog(catalog.hidden);
+        return;
+      }
+      const fold = e.target.closest('[data-lb-fold]');
+      if (fold) {
+        expandEntry(entries[Number(fold.dataset.lbFold)], fold.getAttribute('aria-expanded') !== 'true');
+        return;
+      }
+      const chapter = e.target.closest('[data-lb-entry], [data-lb-hit]');
+      if (chapter) {
+        const entry = entries[Number(chapter.dataset.lbEntry ?? chapter.dataset.lbHitEntry)];
+        go(entry ? entry.page : Number(chapter.dataset.lbHit), entry);
+        toggleCatalog(false);
+        return;
+      }
       const b = e.target.closest('[data-lb-go]');
       if (b) { go(idx + (b.dataset.lbGo === 'next' ? 2 : 0)); return; }
       const m = e.target.closest('[data-lb-mode]');
@@ -325,53 +482,111 @@
       const t = e.target;
       if (t.matches('[data-lb-book]')) {
         book = cache.books[+t.value] || cache.books[0];
-        idx = 0; fillToc(); render(); return;
+        fillToc(); go(1); return;
       }
-      if (t.matches('[data-lb-toc]')) { go(+t.value); return; }
       if (t.matches('[data-lb-page]')) { go(+t.value || 1); return; }
     });
 
-    let timer = null;
-    host.addEventListener('input', function (e) {
-      if (!e.target.matches('[data-lb-q]')) return;
+    searchInput.addEventListener('input', function () {
       clearTimeout(timer);
-      timer = setTimeout(function () {
-        const q = e.target.value.trim().toLowerCase();
-        if (!q) { fillToc(); return; }
-        const sel = $('[data-lb-toc]');
-        const hits = [];
-        book.toc.forEach(function (t) { if (t.t.toLowerCase().indexOf(q) >= 0) hits.push(t); });
-        for (let i = 0; i < book.pages && hits.length < 60; i++) {
-          if ((book.txt[i] || '').toLowerCase().indexOf(q) >= 0) hits.push({ t: '第 ' + (i + 1) + ' 页 · ' + (book.txt[i] || '').slice(0, 30), p: i + 1, d: 1 });
-        }
-        sel.innerHTML = hits.length
-          ? hits.map(function (t) { return '<option value="' + t.p + '">' + esc(t.t) + '</option>'; }).join('')
-          : '<option value="1">没有匹配</option>';
-      }, 250);
+      timer = setTimeout(updateSearch, 180);
+    });
+    host.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !catalog.hidden) {
+        e.stopPropagation();
+        toggleCatalog(false);
+      }
     });
 
     /* 初始化 */
     const sel = $('[data-lb-book]');
     sel.innerHTML = cache.books.map(function (b, i) { return '<option value="' + i + '">' + esc(b.name) + '</option>'; }).join('');
-    book = cache.books[0];
+    sel.value = String(opts.bookIndex || 0);
+    book = cache.books[+sel.value];
     fillToc();
-    if (opts.startPage) idx = Math.max(0, opts.startPage - 1);
-    render();
+    go(opts.startPage || 1);
   }
+
+  function showDrawer(title, host, launcher) {
+    U.closeDrawer();
+    const drawer = document.getElementById('drawer');
+    const panel = drawer && drawer.querySelector('.drawer-panel');
+    U.openDrawer(title, host, function () {
+      if (panel) panel.classList.remove('wide', 'lecture-drawer');
+      if (launcher && launcher.isConnected) launcher.focus({ preventScroll: true });
+    });
+    if (panel) panel.classList.add('wide', 'lecture-drawer');
+  }
+
+  function closeSource(restoreFocus) {
+    if (!sourcePane) return;
+    sourcePane.remove();
+    sourcePane = null;
+    document.body.classList.remove('lecture-source-open');
+    if (restoreFocus && sourceLauncher && sourceLauncher.isConnected) sourceLauncher.focus({ preventScroll: true });
+    sourceLauncher = null;
+  }
+
+  function showSourcePane(host, launcher) {
+    sourcePane = U.el('aside', { class: 'drawer-panel lecture-source-pane', 'aria-label': '讲义原页' },
+      '<header class="drawer-hd"><h2>讲义原页</h2><button type="button" class="icon-btn" aria-label="关闭讲义原页">✕</button></header>');
+    const body = U.el('div', { class: 'drawer-bd' });
+    body.appendChild(host);
+    sourcePane.appendChild(body);
+    const close = sourcePane.querySelector('button');
+    close.addEventListener('click', function () { closeSource(true); });
+    sourcePane.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Escape') closeSource(true);
+    });
+    sourceLauncher = launcher;
+    document.body.classList.add('lecture-source-open');
+    document.body.appendChild(sourcePane);
+    if (launcher && launcher.isConnected) launcher.scrollIntoView({ block: 'nearest' });
+    close.focus({ preventScroll: true });
+  }
+
+  window.addEventListener('hashchange', function () {
+    openRequest++;
+    closeSource(false);
+    if (document.querySelector('#drawer:not([hidden]) [data-lecture-source]')) U.closeDrawer();
+  });
 
   window.LectureUI = {
     ensure: ensure,
-    open: function (item) {
+    open: async function (item) {
       const qid = item && item.qs && item.qs[0] ? item.qs[0].id : null;
-      ensure().then(function () {
-        const box = U.el('div');
-        U.openDrawer('讲义', box);
-        const d = document.getElementById('drawer');
-        if (d) d.querySelector('.drawer-panel').classList.add('wide');
+      const request = ++openRequest;
+      try {
+        await ensure();
+        if (request !== openRequest) return;
+        closeSource(false);
         const host = U.el('div', { class: 'lec-host' });
-        box.appendChild(host);
+        showDrawer('讲义', host);
         viewer(host, { qid: qid });
-      }).catch(function (e) { U.toast(e.message || '讲义载入失败'); });
+      } catch (e) {
+        if (request === openRequest) U.toast(e.message || '讲义载入失败');
+      }
+    },
+    openSource: async function (source, qid, launcher) {
+      const request = ++openRequest;
+      try {
+        const data = await ensure();
+        if (request !== openRequest || (launcher && !launcher.isConnected)) return;
+        const bookIndex = data.books.findIndex(function (b) { return source && source.type === 'lecture' && source.bookId === b.id; });
+        const book = data.books[bookIndex];
+        if (!book || !Number.isInteger(source.page) || source.page < 1 || source.page > book.pages) {
+          U.toast('找不到这张截图的讲义原页');
+          return;
+        }
+        closeSource(false);
+        const host = U.el('div', { class: 'lec-host', 'data-lecture-source': '' });
+        if (window.matchMedia('(min-width: 721px)').matches) showSourcePane(host, launcher);
+        else showDrawer('讲义原页', host, launcher);
+        viewer(host, { qid: qid, bookIndex: bookIndex, startPage: source.page });
+      } catch (e) {
+        if (request === openRequest) U.toast(e.message || '讲义原页载入失败');
+      }
     }
   };
 

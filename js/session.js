@@ -14,6 +14,7 @@
     S: S, start: start, resume: resume,
     teardown: function () {
       closeRelated();
+      Card.disposeNoteEditors(content);
       S.items = []; S.sel = {}; S.res = {};
       const p = document.querySelector('.pager'); if (p) p.remove();
       document.body.classList.remove('has-pager');
@@ -109,6 +110,7 @@
   /* ---------------- 挂载 ---------------- */
   function mount() {
     closeRelated();
+    Card.disposeNoteEditors(content);
     const old = document.querySelector('.pager');
     if (old) old.remove();
     const app = U.resetApp('wrap session');
@@ -152,6 +154,7 @@
   }
 
   function renderContent() {
+    Card.disposeNoteEditors(content);
     content.innerHTML = '';
     content.className = 'session-body' + (S.mode === 'paged' ? ' paged' : '');
     if (S.mode === 'paged') {
@@ -354,7 +357,7 @@
         closeRelated(true);
         return;
       }
-      if (e.target.closest('.related-preview')) return;
+      if (e.target.closest('.related-preview,.note-ink-editor')) return;
       if (e.target.matches('input,textarea,select')) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown' && S.mode === 'paged') {
         if (S.mode === 'paged') { e.preventDefault(); go(S.idx + 1); }
@@ -811,6 +814,7 @@
     if (i < 0 || i >= S.items.length) return;
     closeRelated();
     S.idx = i;
+    Card.disposeNoteEditors(content);
     content.innerHTML = '';
     const card = makeCard(S.items[i], i);
     content.appendChild(card);

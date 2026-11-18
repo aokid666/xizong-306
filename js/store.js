@@ -514,15 +514,44 @@
       else if (txt) blocks.unshift({ i: U.uid(), k: 't', v: txt });
       Store.setNoteBlocks(qid, blocks);
     },
-    addNoteImage(qid, id) {
+    addNoteImage(qid, id, source) {
       const n = Store.note(qid) || { v: 2, blocks: [] };
       n.blocks = n.blocks || [];
       if (!n.blocks.some(function (b) { return b.k === 'i' && b.v === id; })) {
-        n.blocks.push({ i: U.uid(), k: 'i', v: id });
+        const block = { i: U.uid(), k: 'i', v: id };
+        if (source) block.source = source;
+        n.blocks.push(block);
       }
       n.ts = Date.now();
       Store.doc.notes[qid] = n;
       Store.save();
+      if (Store.cloud) Store.cloud.markImagesDirty();
+    },
+    async saveNoteInk(qid, bid, ink, preview) {
+      function findInkBlock() {
+        const note = Store.note(qid);
+        return note && note.blocks.find(function (b) { return b.i === bid && b.k === 'i' && b.ink; });
+      }
+      const previous = bid && findInkBlock();
+      if (bid && !previous) throw new Error('这段手写已不存在');
+      const oldId = previous && previous.v;
+      const id = U.uid();
+      await Promise.all([Store.putImageOrig(id, preview), Store.putImage(id, preview)]);
+      if (!bid) {
+        Store.addNoteBlock(qid, { k: 'i', v: id, ink: ink });
+      } else {
+        const current = findInkBlock();
+        if (!current || current.v !== oldId) {
+          await Store.delImage(id);
+          throw new Error('这段手写已更新，请重新打开编辑');
+        }
+        current.v = id;
+        current.ink = ink;
+        Store.note(qid).ts = Date.now();
+        Store.doc.imgDel[oldId] = Date.now();
+        Store.save();
+        Store.delImage(oldId).catch(function () { });
+      }
       if (Store.cloud) Store.cloud.markImagesDirty();
     },
     removeNoteImage(qid, id) {
